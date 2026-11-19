@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-title" content="Vektora">
 <script type="module" src="pwa.mjs?v=1"></script>
 <link rel="stylesheet" href="converter.css?v=17">
-<script type="module" src="converter.mjs?v=24"></script>
+<script type="module" src="converter.mjs?v=25"></script>
 </head>
 <body>
 <header class="header"><div class="header-inner">
@@ -131,7 +131,8 @@
       <button class="link-btn utility-sample" id="utilitySample">Gunakan contoh</button>
       <div id="upscaleFields">
         <label class="stack">Ukuran keluaran<select id="upscaleFactor"><option value="2">2× ukuran asli</option><option value="3">3× ukuran asli</option><option value="4">4× ukuran asli</option><option value="4k">4K · 4.096 px sisi panjang</option><option value="stock">Minimal 4 MP</option></select></label>
-        <label class="check"><input id="sharpen" type="checkbox" checked> Lanczos · pertahankan ketajaman</label>
+        <label class="check"><input id="sharpen" type="checkbox" checked> Pulihkan ketajaman tepi</label>
+        <p class="muted">Detail yang masih terlihat diperjelas. Detail yang sudah hilang dari sumber tetap terbatas.</p>
       </div>
       <div id="patternFields" hidden><label class="stack">Susunan pola<select id="patternStyle"><option value="mirror">Cermin empat arah</option><option value="repeat">Ulangi kotak</option></select></label><p class="muted">Mode cermin menutup sambungan pada tepi ubin.</p></div>
       <div id="gradientFields" hidden>
@@ -144,6 +145,10 @@
 
     </section>
     <section class="card visual"><div class="preview-head"><div><h2>Pratinjau hasil</h2><p id="utilityStatus" role="status"></p></div></div>
+      <div id="upscaleCompare" class="export-panel utility-export" hidden>
+        <label><span class="sr">Tampilan perbandingan</span><select id="upscalePreviewMode"><option value="result">Hasil</option><option value="source">Gambar asli</option></select></label>
+        <label class="check"><input id="upscaleDetail" type="checkbox"> Detail tengah</label>
+      </div>
       <div class="utility-preview"><canvas id="utilityCanvas" aria-label="Pratinjau hasil studio"></canvas></div>
       <div class="export-panel utility-export"><label class="sr" for="utilityFormat">Format unduhan</label><select id="utilityFormat"><option>PNG</option><option>JPG</option><option id="videoOption" hidden value="VIDEO">Video loop</option></select></div>
     </section>

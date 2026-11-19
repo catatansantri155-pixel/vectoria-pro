@@ -5,7 +5,7 @@ const gradients={
   ocean:["#162a69","#60d5df"]
 };
 const studioCopy={
-  upscale:["Perbesar gambar.","Naikkan resolusi gambar hingga 4×. Gunakan penajaman tepi jika detail gambar asli masih terlihat."],
+  upscale:["Perbesar gambar.","Naikkan resolusi hingga 4× dan perjelas tepi yang masih terlihat pada gambar sumber."],
   pattern:["Buat pola berulang.","Ubah gambar menjadi ubin pola untuk latar, kemasan, atau tekstil."],
   gradient:["Rancang gradien.","Pilih dua warna, tambahkan tekstur, lalu ekspor gambar atau video yang berulang."]
 };
@@ -44,14 +44,14 @@ function gradient(canvas,opts,texture,offset=0){
   }
   g.putImageData(image,0,0);
 }
-function resizeInWorker(image,canvas,sharp){
+function resizeInWorker(image,canvas,sharp,signal){
   const w=image.naturalWidth,h=image.naturalHeight;
   // Downscaled or very large sources use the browser path to bound input-memory costs.
   if(typeof Worker!=="function"||w*h>9e6||canvas.width<w||canvas.height<h){
     const context=canvas.getContext("2d");
     context.imageSmoothingQuality="high";
     context.drawImage(image,0,0,canvas.width,canvas.height);
-    return Promise.resolve();
+    return Promise.resolve(false);
   }
   const source=document.createElement("canvas");
   source.width=w;source.height=h;
@@ -60,14 +60,24 @@ function resizeInWorker(image,canvas,sharp){
   const pixels=input.getImageData(0,0,w,h).data;
   source.width=source.height=0;
   return new Promise((resolve,reject)=>{
-    const worker=new Worker(new URL("./resample-worker.mjs?v=14",import.meta.url),{type:"module"});
-    worker.onmessage=({data})=>{
+    const worker=new Worker(new URL("./resample-worker.mjs?v=15",import.meta.url),{type:"module"});
+    function close(){
+      signal.removeEventListener("abort",cancel);
       worker.terminate();
+    }
+    function cancel(){
+      close();
+      reject(new DOMException("Dibatalkan","AbortError"));
+    }
+    if(signal.aborted){cancel();return;}
+    signal.addEventListener("abort",cancel,{once:true});
+    worker.onmessage=({data})=>{
+      close();
       if(data.error){reject(Error(data.error));return;}
       canvas.getContext("2d").putImageData(new ImageData(data.output,canvas.width,canvas.height),0,0);
-      resolve();
+      resolve(true);
     };
-    worker.onerror=()=>{worker.terminate();reject(Error("Mesin upscale gagal berjalan di browser ini."));};
+    worker.onerror=()=>{close();reject(Error("Mesin upscale gagal berjalan di browser ini."));};
     worker.postMessage({pixels,w,h,width:canvas.width,height:canvas.height,sharp},[pixels.buffer]);
   });
 }
@@ -122,8 +132,31 @@ export function setupUtilities({$,notify,saveFile,checkFile,loadImage,prepareIma
   let kind="upscale",source=sampleUrl,base="botanika",serial=0,ready=false,lastGradient=null,recording=false;
   const availableVideo=videoType();
   const preview=$("utilityCanvas");
+  let output=null,previewSource=null,controller;
   const state=message=>$("utilityStatus").textContent=message;
   function setReady(value){ready=value;$("utilityDownload").disabled=!ready||recording;}
+  function paintPreview(){
+    if(!output)return;
+    const isUpscale=kind==="upscale"&&previewSource;
+    const detail=isUpscale&&$("upscaleDetail").checked;
+    const [w,h]=detail
+      ?[Math.min(480,output.width),Math.min(480,output.height)]
+      :fit(output.width,output.height,800**2,800);
+    preview.width=w;preview.height=h;
+    const context=preview.getContext("2d");
+    context.imageSmoothingQuality="high";
+    if(!isUpscale){
+      context.drawImage(output,0,0,w,h);
+      return;
+    }
+    const cropW=detail?w:output.width,cropH=detail?h:output.height;
+    const x=(output.width-cropW)/2,y=(output.height-cropH)/2;
+    const original=$("upscalePreviewMode").value==="source";
+    const image=original?previewSource:output;
+    const scaleX=original?previewSource.naturalWidth/output.width:1;
+    const scaleY=original?previewSource.naturalHeight/output.height:1;
+    context.drawImage(image,x*scaleX,y*scaleY,cropW*scaleX,cropH*scaleY,0,0,w,h);
+  }
   function gradientOptions(){
     const angle=$("angle").valueAsNumber;
     if(!Number.isFinite(angle)||angle<0||angle>=360)throw Error("Arah gradien harus antara 0 dan 359 derajat.");
@@ -138,12 +171,19 @@ export function setupUtilities({$,notify,saveFile,checkFile,loadImage,prepareIma
   async function run(){
     const ticket=++serial;
     const current=kind;
+    controller?.abort();
+    controller=new AbortController();
+    const signal=controller.signal;
     setReady(false);
+    if(output){output.width=output.height=0;output=null;}
+    previewSource=null;
     state("Menyiapkan pratinjau…");
     await frame();
+    if(signal.aborted)return;
+    const canvas=document.createElement("canvas");
+    let inputImage=null;
     try{
-      const canvas=document.createElement("canvas");
-      let capped=false;
+      let capped=false,browserResize=false;
       if(current==="gradient"){
         const options=gradientOptions();
         [canvas.width,canvas.height]=gradientDimensions(options.ratio,1920);
@@ -151,6 +191,8 @@ export function setupUtilities({$,notify,saveFile,checkFile,loadImage,prepareIma
         lastGradient=options;
       }else{
         const image=await loadImage(source);
+        if(signal.aborted)return;
+        inputImage=image;
         const w=image.naturalWidth,h=image.naturalHeight;
         if(current==="pattern"){
           const [width,height]=fit(w,h,2.5e6,2000);
@@ -162,17 +204,19 @@ export function setupUtilities({$,notify,saveFile,checkFile,loadImage,prepareIma
           const width=Math.ceil(w*factor),height=Math.ceil(h*factor);
           [canvas.width,canvas.height]=fit(width,height,4096**2,4096);
           capped=canvas.width!==width||canvas.height!==height;
-          await resizeInWorker(image,canvas,$("sharpen").checked);
+          browserResize=!await resizeInWorker(image,canvas,$("sharpen").checked,signal);
         }
       }
       if(ticket!==serial)return;
-      preview.width=canvas.width;preview.height=canvas.height;
-      preview.getContext("2d").drawImage(canvas,0,0);
-      state(`${preview.width.toLocaleString("id-ID")} × ${preview.height.toLocaleString("id-ID")} px${capped?" · disesuaikan ke batas keluaran browser":""}`);
+      output=canvas;
+      previewSource=current==="upscale"?inputImage:null;
+      paintPreview();
+      const inputSize=previewSource?`${previewSource.naturalWidth} × ${previewSource.naturalHeight} → `:"";
+      state(`${inputSize}${output.width.toLocaleString("id-ID")} × ${output.height.toLocaleString("id-ID")} px${capped?" · batas 4K":""}${browserResize?" · interpolasi browser":""}`);
       setReady(true);
     }catch(error){
-      if(ticket===serial){state(error.message);notify(error.message);}
-    }
+      if(ticket===serial&&error.name!=="AbortError"){state(error.message);notify(error.message);}
+    }finally{if(output!==canvas)canvas.width=canvas.height=0;}
   }
   $("utilityChoose").onclick=()=>$("utilityFile").click();
   $("utilityFile").onchange=async event=>{
@@ -182,6 +226,7 @@ export function setupUtilities({$,notify,saveFile,checkFile,loadImage,prepareIma
     const error=checkFile(file);
     if(error){notify(error);return;}
     const request=++serial;
+    controller?.abort();
     setReady(false);
     try{
       const url=await prepareImageFile(file);
@@ -198,10 +243,12 @@ export function setupUtilities({$,notify,saveFile,checkFile,loadImage,prepareIma
     run();
   };
   $("utilityRun").onclick=run;
+  $("upscalePreviewMode").onchange=$("upscaleDetail").onchange=paintPreview;
   $("gradientPreset").onchange=()=>{setPalette();run();};
   for(const id of ["gradientFirst","gradientSecond","gradientRatio","angle","grain","patternStyle","upscaleFactor","sharpen"])$(id).onchange=run;
   $("utilityDownload").onclick=async()=>{
-    if(!ready||recording)return;
+    if(!ready||recording||!output)return;
+    const exportCanvas=output;
     const format=$("utilityFormat").value;
     const name=kind==="gradient"?"vektora-gradien":base+(kind==="pattern"?"-ubin":"-diperbesar");
     try{
@@ -214,12 +261,13 @@ export function setupUtilities({$,notify,saveFile,checkFile,loadImage,prepareIma
         if(ticket===serial)state("Video loop 4 detik siap diunduh.");
       }else if(format==="JPG"){
         const temp=document.createElement("canvas");
-        temp.width=preview.width;temp.height=preview.height;
+        temp.width=exportCanvas.width;temp.height=exportCanvas.height;
         const context=temp.getContext("2d");
         context.fillStyle="#fff";context.fillRect(0,0,temp.width,temp.height);
-        context.drawImage(preview,0,0);
-        saveFile(name+".jpg",await rasterBlob(temp,format));
-      }else saveFile(name+".png",await rasterBlob(preview,format));
+        context.drawImage(exportCanvas,0,0);
+        try{saveFile(name+".jpg",await rasterBlob(temp,format));}
+        finally{temp.width=temp.height=0;}
+      }else saveFile(name+".png",await rasterBlob(exportCanvas,format));
     }catch(error){notify(error.message);}
     finally{recording=false;setReady(ready);}
   };
@@ -227,7 +275,7 @@ export function setupUtilities({$,notify,saveFile,checkFile,loadImage,prepareIma
     kind=studio;
     const isGradient=studio==="gradient";
     [$("utilityTitle").textContent,$("utilityDescription").textContent]=studioCopy[studio];
-    $("upscaleFields").hidden=studio!=="upscale";
+    $("upscaleFields").hidden=$("upscaleCompare").hidden=studio!=="upscale";
     $("patternFields").hidden=studio!=="pattern";
     $("gradientFields").hidden=!isGradient;
     $("utilityChoose").hidden=$("utilitySample").hidden=isGradient;

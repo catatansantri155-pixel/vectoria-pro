@@ -6,7 +6,7 @@ Konverter JPG, PNG, WebP, BMP, GIF, dan AVIF dengan pemrosesan lokal. GIF dipros
 
 - **Vektor** menangkap kontur sebagai path. Pilih mode warna atau monokrom, atur detail, warna, ambang, pembersihan bintik dan latar putih, lalu bandingkan hasil. Zoom berpusat pada pratinjau. Hasil dapat diekspor sebagai SVG, EPS, PDF, PNG, atau JPG.
 - **Lembar ikon** mendeteksi ikon terpisah pada latar polos atau transparan, dengan opsi kisi manual hingga 20 × 20. Hasil diunduh sebagai ZIP berisi SVG individual atau PNG. Unggah file SVG atau EPS satu per satu ke Adobe Stock.
-- **Perbesar** memakai interpolasi browser dan penajaman tepi opsional. Resolusi keluaran dibatasi 16 MP untuk mengendalikan memori.
+- **Perbesar** memakai interpolasi dan pemulihan tepi opsional. Resolusi keluaran dibatasi 16 MP untuk mengendalikan memori.
 - **Pola** membantu membuat ubin dengan pengulangan biasa atau cermin empat arah.
 - **Gradien** membuat gradien bertekstur opsional dengan empat palet, rasio, dan arah yang dapat diedit. Ekspor loop empat detik tersedia jika browser mendukung MediaRecorder dan Canvas CaptureStream.
 - **Editor gambar** di `editor.html` tetap menggunakan penyimpanan proyek browser dari versi sebelumnya.
@@ -59,7 +59,7 @@ Buka [localhost:8000](http://localhost:8000/). Konverter mulai tanpa gambar. Unt
 ### Ilustrasi 3D dan file gambar
 - **Ilustrasi 3D dan gradasi** menggunakan bidang gradien SVG pada gambar tanpa transparansi untuk menjaga highlight dan bayangan. Mode **Otomatis** mendeteksi gradasi pada sumber. **Trace HD** menggunakan interpolasi Lanczos dengan sampel hingga 2×, dibatasi 1.536 piksel per sisi dan sekitar 1,8 juta sampel. Penajaman lokal bekerja pada kecerahan agar tidak memucatkan warna. Pilih **SVG** untuk menyimpan gradien sebagai elemen vektor, **SVG ZIP** untuk mengunduh SVG secara terkompresi, atau **PNG/JPG** untuk hasil raster. Arsip ZIP menggunakan kompresi tanpa kehilangan kualitas jika didukung browser. Ekspor EPS/PDF menghasilkan bidang warna datar. Gambar transparan atau pilihan hapus latar menggunakan pelacakan kontur.
 - Vektora membaca tanda format di dalam file dan mencoba jalur pemuatan biasa jika dekode langsung gagal. Format yang tidak didukung tetap bergantung pada dekoder browser. Ekspor ulang file yang gagal sebagai PNG atau JPG.
-- Studio Perbesar memiliki ekspor 4K dan interpolasi Lanczos atau Mitchell–Netravali untuk gambar yang sesuai batas memori. Perbesaran tidak merekonstruksi detail yang hilang.
+- **Perbesar** mendukung keluaran hingga 4K. **Pulihkan ketajaman tepi** menggunakan Lanczos, menghaluskan takik di sepanjang tepi, dan memperjelas kontras melintasi tepi. Bandingkan **Gambar asli** dan **Hasil** melalui **Detail tengah**. Unduhan memakai resolusi penuh. Detail yang sudah hilang dari sumber tetap terbatas.
 
 
 ### Instal sebagai aplikasi
