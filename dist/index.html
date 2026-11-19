@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-title" content="Vektora">
 <script type="module" src="pwa.mjs?v=1"></script>
 <link rel="stylesheet" href="converter.css?v=17">
-<script type="module" src="converter.mjs?v=26"></script>
+<script type="module" src="converter.mjs?v=27"></script>
 </head>
 <body>
 <header class="header"><div class="header-inner">
@@ -96,7 +96,7 @@
         <div class="export-controls">
           <label id="stockSettings" class="stock-option"><input id="stock" type="checkbox" checked><span><strong>Artboard Adobe Stock</strong><small id="dimensions">16 MP · proporsi asli</small></span></label>
           <label class="export-field">Format<select id="format"><option>SVG</option><option>SVG ZIP</option><option>EPS</option><option>PDF</option><option>PNG</option><option>JPG</option></select></label>
-          <label class="export-field" id="rasterSettings" hidden>Resolusi<select id="rasterSize"><option value="1920">Full HD · 1.920 px</option><option value="2560">QHD · 2.560 px</option><option value="4096" selected>4K · 4.096 px</option><option value="native">Ukuran sumber · maks. 4K</option></select><small id="rasterDimensions">Sisi terpanjang</small></label>
+          <label class="export-field" id="rasterSettings" hidden>Resolusi<select id="rasterSize"><option value="1920">Full HD · 1.920 px</option><option value="2560">QHD · 2.560 px</option><option value="4096" selected>Hingga 4K · maks. 16 MP</option><option value="native">Ukuran sumber · maks. 4K</option></select><small id="rasterDimensions">Sisi terpanjang</small></label>
         </div>
         <details id="slice" hidden><summary>Pisahkan lembar ikon <span data-icon="chevron"></span></summary>
           <p>Temukan ikon berdasarkan jarak antarikon. Gunakan kisi manual jika ikon saling menempel.</p>
@@ -130,7 +130,7 @@
       <input id="utilityFile" type="file" accept=".jpg,.jpeg,.png,.webp,.bmp,.gif,.avif,image/jpeg,image/png,image/webp,image/bmp,image/gif,image/avif" hidden>
       <button class="link-btn utility-sample" id="utilitySample">Gunakan contoh</button>
       <div id="upscaleFields">
-        <label class="stack">Ukuran keluaran<select id="upscaleFactor"><option value="2">2× ukuran asli</option><option value="3">3× ukuran asli</option><option value="4">4× ukuran asli</option><option value="4k">4K · 4.096 px sisi panjang</option><option value="stock">Minimal 4 MP</option></select></label>
+        <label class="stack">Ukuran keluaran<select id="upscaleFactor"><option value="2">2× ukuran asli</option><option value="3">3× ukuran asli</option><option value="4">4× ukuran asli</option><option value="4k">Hingga 4K · maks. 16 MP</option><option value="stock">Minimal 4 MP</option></select></label>
         <label class="check"><input id="sharpen" type="checkbox" checked> Pulihkan ketajaman tepi</label>
         <p class="muted">Detail yang masih terlihat diperjelas. Detail yang sudah hilang dari sumber tetap terbatas.</p>
       </div>

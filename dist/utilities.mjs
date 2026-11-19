@@ -17,8 +17,8 @@ function fit(w,h,maxArea,maxEdge){
 function gradientDimensions(ratio,edge){
   return ratio>=1?[edge,Math.round(edge/ratio)]:[Math.round(edge*ratio),edge];
 }
-function noiseTexture(w,h){
-  const values=new Int8Array(w*h);
+function noiseTexture(size){
+  const values=new Int8Array(size);
   let state=0x149b39f2;
   for(let i=0;i<values.length;i++){
     state^=state<<13;state^=state>>>17;state^=state<<5;
@@ -212,7 +212,7 @@ export function setupUtilities({$,notify,saveFile,checkFile,loadImage,prepareIma
       previewSource=current==="upscale"?inputImage:null;
       paintPreview();
       const inputSize=previewSource?`${previewSource.naturalWidth} × ${previewSource.naturalHeight} → `:"";
-      state(`${inputSize}${output.width.toLocaleString("id-ID")} × ${output.height.toLocaleString("id-ID")} px${capped?" · batas 4K":""}${browserResize?" · interpolasi browser":""}`);
+      state(`${inputSize}${output.width.toLocaleString("id-ID")} × ${output.height.toLocaleString("id-ID")} px${capped?" · batas 4K / 16 MP":""}${browserResize?" · interpolasi browser":""}`);
       setReady(true);
     }catch(error){
       if(ticket===serial&&error.name!=="AbortError"){state(error.message);notify(error.message);}

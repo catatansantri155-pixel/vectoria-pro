@@ -1,4 +1,4 @@
-import {epsText,outputSize,pdfText,rasterSize,svgStart,svgText,traceSize,zipFiles} from "./formats.mjs?v=25";
+import {epsText,outputSize,pdfText,rasterSize,svgStart,svgText,traceSize,zipFiles} from "./formats.mjs?v=26";
 import {loadImage,prepareImageFile} from "./image-codec.mjs?v=14";
 import {detectIcons,detectInkPaper,gridIcons,removeBorderColor} from "./sheet.mjs?v=17";
 import {mountIcons} from "./icons.mjs?v=1";
@@ -671,7 +671,7 @@ $("closeGuide").onclick=()=>$("guide").close();
 async function openUtility(target){
   if(!utilityLoader){
     $("utilityStatus").textContent="Memuat alat…";
-    utilityLoader=import("./utilities.mjs?v=16").then(({setupUtilities})=>
+    utilityLoader=import("./utilities.mjs?v=17").then(({setupUtilities})=>
       setupUtilities({$,notify,saveFile,checkFile,loadImage,prepareImageFile,rasterBlob,sampleUrl})
     ).catch(error=>{utilityLoader=null;throw error;});
   }

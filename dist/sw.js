@@ -1,6 +1,6 @@
-const cacheName="vektora-converter-v26";
+const cacheName="vektora-converter-v27";
 const assets=[
-  "./","./converter.css?v=17","./converter.mjs?v=26","./icons.mjs?v=1","./trace-worker.mjs?v=24","./trace.mjs?v=24","./contours.mjs?v=18","./ink-contours.mjs?v=20","./formats.mjs?v=25","./sheet.mjs?v=17","./utilities.mjs?v=16","./image-codec.mjs?v=14","./tones.mjs?v=14","./shading-mesh.mjs?v=3","./resample-worker.mjs?v=15","./resample.mjs?v=14","./upscale-detail.mjs?v=1","./app.webmanifest?v=6","./pwa.mjs?v=1",
+  "./","./converter.css?v=17","./converter.mjs?v=27","./icons.mjs?v=1","./trace-worker.mjs?v=24","./trace.mjs?v=24","./contours.mjs?v=18","./ink-contours.mjs?v=20","./formats.mjs?v=26","./sheet.mjs?v=17","./utilities.mjs?v=17","./image-codec.mjs?v=14","./tones.mjs?v=14","./shading-mesh.mjs?v=3","./resample-worker.mjs?v=15","./resample.mjs?v=14","./upscale-detail.mjs?v=1","./app.webmanifest?v=6","./pwa.mjs?v=1",
   "./editor.html","./style.css?v=8","./editor.mjs?v=8","./assets/vektora-192.png","./assets/vektora-512.png","./assets/vektora-apple-180.png","./assets/vektora-maskable-512.png","./assets/botanika.jpg"
 ];
 self.addEventListener("install",event=>{
@@ -14,9 +14,11 @@ self.addEventListener("install",event=>{
     if (!editorHtml.includes('id="board"')) throw Error("Halaman editor tidak cocok.");
     const otherAssets = assets.slice(1).filter(path=>path!=="./editor.html");
     await cache.addAll(otherAssets.map(path=>new Request(path,{cache:"reload"})));
-    await cache.put("./editor.html", new Response(editorHtml, {
-      headers: {"Content-Type":"text/html; charset=utf-8"}
-    }));
+    const editorHeaders = new Headers(editor.headers);
+    editorHeaders.delete("Content-Encoding");
+    editorHeaders.delete("Content-Length");
+    editorHeaders.set("Content-Type","text/html; charset=utf-8");
+    await cache.put("./editor.html",new Response(editorHtml,{headers:editorHeaders}));
     await cache.put("./",root);
     await self.skipWaiting();
   })());

@@ -10,7 +10,9 @@ export function rasterSize(w,h,preset){
   const requested = preset==="native" ? longest : Number(preset);
   const edge = Math.min(4096,requested);
   const scale = Math.min(edge/longest,Math.sqrt(16e6/(w*h)));
-  return [Math.max(1,Math.round(w*scale)),Math.max(1,Math.round(h*scale))];
+  const width=Math.max(1,Math.round(w*scale)),height=Math.max(1,Math.round(h*scale));
+  if(width*height<=16e6)return [width,height];
+  return [Math.max(1,Math.floor(w*scale)),Math.max(1,Math.floor(h*scale))];
 }
 export function traceSize(w,h,detail,hd){
   const edgeLimit = hd ? [700,1050,1600,2000,2400][detail] : [450,700,1000,1350,1750][detail];
