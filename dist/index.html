@@ -12,8 +12,8 @@
 <link rel="manifest" href="app.webmanifest?v=6">
 <meta name="apple-mobile-web-app-title" content="Vektora">
 <script type="module" src="pwa.mjs?v=1"></script>
-<link rel="stylesheet" href="converter.css?v=21">
-<script type="module" src="converter.mjs?v=32"></script>
+<link rel="stylesheet" href="converter.css?v=22">
+<script type="module" src="converter.mjs?v=33"></script>
 </head>
 <body>
 <header class="header"><div class="header-inner">
@@ -23,6 +23,25 @@
     <button type="button" class="icon top-help" id="help" data-icon="help" aria-label="Panduan"></button>
   </div>
 </div></header>
+<aside class="app-dock" aria-label="Alat dan tindakan studio">
+  <nav class="main-nav" aria-label="Studio">
+    <button class="nav-link" data-studio="vector" aria-pressed="true" data-icon="vector">Vektor</button>
+    <button class="nav-link" data-studio="upscale" aria-pressed="false" data-icon="maximize">Perbesar</button>
+    <button class="nav-link" data-studio="pattern" aria-pressed="false" data-icon="pattern">Pola</button>
+    <button class="nav-link" data-studio="gradient" aria-pressed="false" data-icon="gradient">Gradien</button>
+    <a class="nav-link editor-link" href="editor.html" data-icon="pencil">Editor</a>
+  </nav>
+  <div class="dock-actions" id="vectorActions">
+    <button id="dockPick" class="button outline" type="button" data-icon="upload" aria-label="Pilih gambar" title="Pilih gambar"><span class="desktop-action">Pilih gambar</span></button>
+    <button id="run" class="button primary run" type="button" data-icon="spark" disabled>Buat vektor</button>
+    <button id="download" class="button primary" data-icon="download" disabled>Unduh</button>
+  </div>
+  <div class="dock-actions utility-dock" id="utilityActions" hidden>
+    <button id="utilityDockPick" class="button outline desktop-action" type="button" data-icon="upload">Pilih gambar</button>
+    <button id="utilityRun" class="button primary run" data-icon="spark">Buat hasil</button>
+    <button id="utilityDownload" class="button primary" data-icon="download" disabled>Unduh</button>
+  </div>
+</aside>
 <main id="vector" class="page">
   <section class="intro">
     <h1>Gambar jadi <em>vektor.</em></h1>
@@ -168,24 +187,6 @@
   </div>
 </main>
 <footer class="footer"><span data-icon="shield">Gambar diproses di perangkatmu.</span></footer>
-<div class="app-dock">
-  <div class="dock-actions" id="vectorActions">
-    <button id="dockPick" class="button outline" type="button" data-icon="upload" aria-label="Pilih gambar" title="Pilih gambar"></button>
-    <button id="run" class="button primary run" type="button" data-icon="spark" disabled>Buat vektor</button>
-    <button id="download" class="button primary" data-icon="download" disabled>Unduh</button>
-  </div>
-  <div class="dock-actions utility-dock" id="utilityActions" hidden>
-    <button id="utilityRun" class="button primary run" data-icon="spark">Buat hasil</button>
-    <button id="utilityDownload" class="button primary" data-icon="download" disabled>Unduh</button>
-  </div>
-  <nav class="main-nav" aria-label="Studio">
-    <button class="nav-link" data-studio="vector" aria-pressed="true" data-icon="vector">Vektor</button>
-    <button class="nav-link" data-studio="upscale" aria-pressed="false" data-icon="maximize">Perbesar</button>
-    <button class="nav-link" data-studio="pattern" aria-pressed="false" data-icon="pattern">Pola</button>
-    <button class="nav-link" data-studio="gradient" aria-pressed="false" data-icon="gradient">Gradien</button>
-    <a class="nav-link editor-link" href="editor.html" data-icon="pencil">Editor</a>
-  </nav>
-</div>
 <dialog id="guide"><div class="card-head"><h2>Panduan Vektora</h2><button class="icon" id="closeGuide" aria-label="Tutup panduan" data-icon="close"></button></div><p>Pilih gambar, atur detail dan warna, lalu ketuk <strong>Buat vektor</strong>. Logo, ikon, dan ilustrasi warna datar biasanya menghasilkan kontur yang paling bersih.</p><p>Mode monokrom menyediakan gradasi abu-abu untuk ilustrasi 3D dan siluet hitam-putih. Untuk GIF, yang diproses adalah gambar yang didekode browser, biasanya frame pertama.</p><p>Unduh satu file SVG atau EPS untuk unggahan Adobe Stock. ZIP digunakan untuk mengambil banyak file sekaligus. Periksa detail dan hak penggunaan sebelum mengunggah.</p><p>Untuk membuka studio saat offline, jalankan situs sekali saat terhubung dan tunggu aset selesai disimpan di browser.</p></dialog>
 <div id="notice" role="alert" hidden></div>
 <dialog id="installHelp" aria-labelledby="installTitle">
