@@ -1,5 +1,6 @@
-import {epsText,outputSize,pdfText,rasterSize,svgText,traceSize,zipFiles} from "./formats.mjs?v=10";
-import {setupUtilities} from "./utilities.mjs";
+import {epsText,outputSize,pdfText,rasterSize,svgText,traceSize,zipFiles} from "./formats.mjs?v=13";
+import {setupUtilities} from "./utilities.mjs?v=13";
+import {loadImage,prepareImageFile} from "./image-codec.mjs?v=13";
 import {mountIcons} from "./icons.mjs";
 
 const $=id=>document.getElementById(id);
@@ -32,16 +33,8 @@ function saveFile(name,contents,type){
   anchor.remove();
   setTimeout(()=>URL.revokeObjectURL(url),30000);
 }
-async function loadImage(url){
-  const image=new Image();
-  image.decoding="async";
-  image.src=url;
-  try{await image.decode();}catch{throw Error("Gambar tidak dapat dibaca oleh browser.");}
-  if(!image.naturalWidth || image.naturalWidth*image.naturalHeight>60e6) throw Error("Resolusi gambar melebihi 60 MP.");
-  return image;
-}
 function checkFile(file){
-  if(!allowed.test(file.name)&&!(file.name==="gambar"&&/^image\/(jpeg|png|webp|bmp|gif|avif)$/.test(file.type)))return "Format dicoba: JPG, PNG, WebP, BMP, GIF, atau AVIF.";
+  if(!allowed.test(file.name)&&!file.type.startsWith("image/"))return "Format dicoba: JPG, PNG, WebP, BMP, GIF, atau AVIF.";
   if(file.size>20e6)return "Ukuran file melebihi 20 MB.";
   return "";
 }
@@ -62,12 +55,13 @@ let jobList=[],selected=0,studio="vector",mode="color",view="compare",zoom=1,ser
 let worker=null,pending=null,processing=false,previewUrl;
 const current=()=>jobList[selected];
 const label=id=>Number($(id).value);
-const settings=()=>({mode,colors:label("colors"),threshold:label("threshold"),detail:label("detail"),noise:label("noise"),removeWhite:$("removeWhite").checked,hd:$("traceHD").checked,smooth:$("smoothCurves").checked});
+const settings=()=>({mode,colors:label("colors"),threshold:label("threshold"),detail:label("detail"),noise:label("noise"),removeWhite:$("removeWhite").checked,hd:$("traceHD").checked,smooth:$("smoothCurves").checked,profile:$("traceProfile").value});
 const detailNames=["Sederhana","Ringan","Seimbang","Detail tinggi","Sangat detail"];
 function updateSettings(){
   for(const key of ["colors","threshold","noise"])$(key+"Out").textContent=$(key).value;
   $("detailOut").textContent=detailNames[label("detail")];
   $("colorControls").hidden=mode!=="color";
+  $("profileControl").hidden=mode!=="color";
   $("monoControls").hidden=mode!=="mono";
   document.querySelectorAll("[data-mode]").forEach(el=>el.setAttribute("aria-pressed",el.dataset.mode===mode));
 }
@@ -152,7 +146,7 @@ function renderPreview(){
     $("fileName").textContent=item.name;
     $("fileSize").textContent=ready?`${count(item.w)} × ${count(item.h)} px · ${item.size?sizeText(item.size):"Gambar contoh"}`:item.error??"Memuat…";
   }
-  if(!processing)status(item?.error??(result?(result.layers.length?"Hasil siap diperiksa dan diunduh.":"Hasil kosong. Atur ambang atau gunakan mode warna."):"Pilih gambar atau gunakan contoh."));
+  if(!processing)status(item?.error??(result?(result.layers.length?(result.gradients?"Hasil gradasi vektor siap diperiksa dan diunduh.":"Hasil siap diperiksa dan diunduh."):"Hasil kosong. Atur ambang atau gunakan mode warna."):"Pilih gambar atau gunakan contoh."));
   if(item&&!processing&&ready&&!result&&!item.error)status("Gambar siap. Ketuk Buat vektor.");
   updateDimensions();
   refreshButtons();
@@ -160,9 +154,22 @@ function renderPreview(){
 }
 async function inspect(item){
   if(item.w)return;
-  const image=await loadImage(item.url);
-  item.w=image.naturalWidth;
-  item.h=image.naturalHeight;
+  if(!item.source){
+    item.source=(async()=>{
+      if(item.file&&!item.url){
+        const url=await prepareImageFile(item.file);
+        if(!jobList.includes(item)){
+          URL.revokeObjectURL(url);
+          throw Error("Gambar sudah diganti.");
+        }
+        item.url=url;
+      }
+      const image=await loadImage(item.url);
+      item.w=image.naturalWidth;
+      item.h=image.naturalHeight;
+    })().catch(error=>{item.source=null;throw error;});
+  }
+  await item.source;
 }
 async function selectItem(index){
   selected=index;
@@ -184,7 +191,7 @@ function stopProcessing(){
 }
 function replaceItems(items){
   stopProcessing();
-  for(const item of jobList)if(item.local)URL.revokeObjectURL(item.url);
+  for(const item of jobList)if(item.local&&item.url)URL.revokeObjectURL(item.url);
   jobList=items;
   view="compare";
   updateQueue();
@@ -201,7 +208,7 @@ function addFiles(files){
   for(const file of Array.from(files).slice(0,30)){
     const error=checkFile(file);
     if(error){firstError ||= `${file.name}: ${error}`;continue;}
-    accepted.push({name:file.name==="gambar"?"gambar-tempel.png":file.name,url:URL.createObjectURL(file),local:true,size:file.size});
+    accepted.push({name:file.name==="gambar"?"gambar-tempel.png":file.name,file,local:true,size:file.size});
   }
   if(firstError)notify(firstError);
   else if(files.length>30)notify("Maksimal 30 gambar per proses. Tiga puluh file pertama ditambahkan.");
@@ -209,7 +216,7 @@ function addFiles(files){
 }
 function trace(pixels,w,h,options,progress){
   if(!worker){
-    worker=new Worker(new URL("./trace-worker.mjs?v=10",import.meta.url),{type:"module"});
+    worker=new Worker(new URL("./trace-worker.mjs?v=13",import.meta.url),{type:"module"});
     worker.onmessage=event=>{
       const {progress,error,result}=event.data;
       if(!pending)return;
@@ -307,13 +314,13 @@ async function downloadResult(){
       if(format==="JPG"){context.fillStyle="#ffffff";context.fillRect(0,0,w,h);}
       const url=URL.createObjectURL(new Blob([svgText(model,{dimensions:[w,h]})],{type:"image/svg+xml"}));
       try{
-        const image=await loadImage(url);
+        const image=await loadImage(url,{exporting:true});
         context.imageSmoothingQuality="high";
         context.drawImage(image,0,0,w,h);
         saveFile(base+"."+format.toLowerCase(),await rasterBlob(canvas,format));
       }finally{URL.revokeObjectURL(url);}
     }
-    notify(`${format} siap diunduh.`);
+    notify(model.gradients&&["EPS","PDF"].includes(format)?`${format} diunduh dengan warna datar. Gunakan SVG untuk mempertahankan gradasi.`:`${format} siap diunduh.`);
   }catch(error){notify(error.message);}
 }
 function batchDownload(){
@@ -376,12 +383,12 @@ function settingsChanged(){
   updateSettings();
   if(current()?.result&&!processing)status("Pengaturan berubah. Ketuk Buat vektor untuk memperbarui hasil.");
 }
-for(const id of ["detail","colors","threshold","noise","removeWhite","traceHD","smoothCurves"])$(id).oninput=settingsChanged;
+for(const id of ["detail","colors","threshold","noise","removeWhite","traceHD","smoothCurves","traceProfile"])$(id).oninput=settingsChanged;
 document.querySelectorAll("[data-mode]").forEach(button=>button.onclick=()=>{mode=button.dataset.mode;settingsChanged();});
 document.querySelectorAll("button[data-view]").forEach(button=>button.onclick=()=>switchView(button.dataset.view));
 $("help").onclick=()=>$("guide").showModal();
 $("closeGuide").onclick=()=>$("guide").close();
-const openUtility=setupUtilities({$,notify,saveFile,checkFile,loadImage,rasterBlob,sampleUrl});
+const openUtility=setupUtilities({$,notify,saveFile,checkFile,loadImage,prepareImageFile,rasterBlob,sampleUrl});
 document.querySelectorAll("button[data-studio]").forEach(button=>button.onclick=()=>{
   studio=button.dataset.studio;
   document.querySelectorAll("button[data-studio]").forEach(el=>el.setAttribute("aria-pressed",el===button));

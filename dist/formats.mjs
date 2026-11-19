@@ -29,16 +29,32 @@ export function svgText(model,options={}){
     ? outputSize(Math.round(crop.w),Math.round(crop.h),options.stock)
     : outputSize(model.originalWidth??w,model.originalHeight??h,options.stock));
   const dim=options.preview ? "" : ` width="${width}" height="${height}"`;
-  const shapes=layers.map(({fill,rings,paths:geometry})=>{
-    const paths=rings.map((ring,i)=>!options.crop||intersects(ring,crop)?sequence(geometry?.[i]??polygon(ring)):"").join("");
-    if(!paths)return "";
-    const paint=options.outlines ? `fill="none" stroke="${fill}" stroke-width="${round(Math.max(w,h)/545)}"` : `fill="${fill}" stroke="${fill}" stroke-width="${seamStroke(model)}" stroke-linejoin="round"`;
-    return `<path ${paint} d="${paths}"/>`;
-  }).join("");
-  const content=options.crop
-    ? `<defs><clipPath id="tile"><rect width="${crop.w}" height="${crop.h}"/></clipPath></defs><g clip-path="url(#tile)"><g transform="translate(${-crop.x} ${-crop.y})">${shapes}</g></g>`
-    : shapes;
-  return `<svg xmlns="http://www.w3.org/2000/svg"${dim} viewBox="0 0 ${crop.w} ${crop.h}" fill-rule="evenodd">${content}</svg>`;
+  const gradients=[],shapes=[];
+  for(const {fill,rings,paths:geometry,regions} of layers){
+    const groups=new Map();
+    for(const [i,ring] of rings.entries()){
+      if(options.crop&&!intersects(ring,crop))continue;
+      const id=options.outlines?0:regions?.[i]??0;
+      const group=model.gradients?.[id]?id:0;
+      groups.set(group,(groups.get(group)??"")+sequence(geometry?.[i]??polygon(ring)));
+    }
+    for(const [id,paths] of groups){
+      const gradient=id?model.gradients[id]:null;
+      let color=fill;
+      if(gradient){
+        const {x1,y1,x2,y2,startColor,endColor}=gradient;
+        gradients.push(`<linearGradient id="g${id}" gradientUnits="userSpaceOnUse" x1="${round(x1)}" y1="${round(y1)}" x2="${round(x2)}" y2="${round(y2)}"><stop stop-color="${startColor}"/><stop offset="1" stop-color="${endColor}"/></linearGradient>`);
+        color=`url(#g${id})`;
+      }
+      const paint=options.outlines ? `fill="none" stroke="${fill}" stroke-width="${round(Math.max(w,h)/545)}"` : `fill="${color}" stroke="${color}" stroke-width="${seamStroke(model)}" stroke-linejoin="round"`;
+      shapes.push(`<path ${paint} d="${paths}"/>`);
+    }
+  }
+  const clip=options.crop?`<clipPath id="tile"><rect width="${crop.w}" height="${crop.h}"/></clipPath>`:"";
+  const definitions=clip||gradients.length?`<defs>${clip}${gradients.join("")}</defs>`:"";
+  const art=shapes.join("");
+  const content=options.crop?`<g clip-path="url(#tile)"><g transform="translate(${-crop.x} ${-crop.y})">${art}</g></g>`:art;
+  return `<svg xmlns="http://www.w3.org/2000/svg"${dim} viewBox="0 0 ${crop.w} ${crop.h}" fill-rule="evenodd">${definitions}${content}</svg>`;
 }
 function intersects(ring,crop) {
   let left=Infinity,top=Infinity,right=-Infinity,bottom=-Infinity;

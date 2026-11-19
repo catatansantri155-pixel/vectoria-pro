@@ -1,4 +1,5 @@
-import {sharedContours} from "./contours.mjs?v=10";
+import {fitRegionTones,hasShading,smoothTonePixels} from "./tones.mjs?v=13";
+import {sharedContours} from "./contours.mjs?v=13";
 
 const DIRECTIONS = [[1,0],[0,1],[-1,0],[0,-1]];
 const SEARCH_DIRECTIONS = [...DIRECTIONS,[-1,-1],[1,-1],[-1,1],[1,1]];
@@ -8,7 +9,7 @@ const hex = rgb => "#"+rgb.map(value=>value.toString(16).padStart(2,"0")).join("
 
 const colorDistance=(r,g,b,[pr,pg,pb])=>(pr-r)**2*.28+(pg-g)**2*.53+(pb-b)**2*.19;
 
-function paletteFor(pixels,w,h,wanted,detail,smooth,hd) {
+function paletteFor(pixels,w,h,wanted,detail,smooth,hd,tonal) {
   const all = new Map(),interior=new Map();
   const radius=hd?4:3;
   function add(histogram,key,r,g,b){
@@ -81,7 +82,7 @@ function paletteFor(pixels,w,h,wanted,detail,smooth,hd) {
       if(total[3])colors[i]=total.slice(0,3).map(value=>Math.round(value/total[3]));
     }
   }
-  const separation=[16,13,10,7,4][detail]**2;
+  const separation=([16,13,10,7,4][detail]*(tonal ? .45 : 1))**2;
   return colors.filter(([r,g,b],index)=>!colors.slice(0,index).some(color=>colorDistance(r,g,b,color)<separation));
 }
 function dropWhite(pixels,w,h) {
@@ -107,16 +108,17 @@ function dropWhite(pixels,w,h) {
     if(p<(h-1)*w)consider(p+w);
   }
 }
-function classify(pixels,colors,threshold) {
+function classify(pixels,colors,threshold,tonal) {
   const labels=new Uint8Array(pixels.length/4);
-  const lookup=new Uint8Array(32768);
+  const shift=tonal?2:3,base=256>>shift;
+  const lookup=new Uint8Array(base**3);
   lookup.fill(255);
   for(let i=0;i<labels.length;i++){
     const j=i*4;
     if(pixels[j+3]<128 || !colors.length) continue;
     const r=pixels[j],g=pixels[j+1],b=pixels[j+2];
     if(threshold!==null){if(r*.213+g*.715+b*.072<threshold) labels[i]=1;continue;}
-    const key=(r>>3)*1024+(g>>3)*32+(b>>3);
+    const key=(r>>shift)*base*base+(g>>shift)*base+(b>>shift);
     if(lookup[key]===255){
       let best=Infinity,bestIndex=0;
       for(let c=0;c<colors.length;c++){
@@ -217,7 +219,7 @@ function simplify(points,tolerance) {
   const result=points.filter((_,i)=>keep[i]);
   return result.length>=3?result:points;
 }
-function traceEdges(labels,w,h,colors,detail,smooth,hd,progress) {
+function traceEdges(labels,w,h,colors,detail,smooth,hd,progress,tonal) {
   const edges=new Uint8Array(labels.length);
   for(let i=0;i<labels.length;i++){
     const label=labels[i],x=i%w;
@@ -227,8 +229,8 @@ function traceEdges(labels,w,h,colors,detail,smooth,hd,progress) {
     if(i>=labels.length-w||labels[i+w]!==label)edges[i]|=4;
     if(!x||labels[i-1]!==label)edges[i]|=8;
   }
-  const layers=colors.map(color=>({fill:hex(color),rings:[],...(smooth?{paths:[]}:{})}));
-  const fit=smooth?sharedContours(w,detail,hd):null;
+  const layers=colors.map(color=>({fill:hex(color),rings:[],...(smooth?{paths:[]}:{}),...(tonal?{regions:[]}:{})}));
+  const fit=smooth?sharedContours(w,detail,hd,Boolean(tonal)):null;
   const labelAt=(x,y)=>x<0||x>=w||y<0||y>=h?0:labels[y*w+x];
   function junction(x,y){
     const a=labelAt(x-1,y-1),b=labelAt(x,y-1);
@@ -277,19 +279,26 @@ function traceEdges(labels,w,h,colors,detail,smooth,hd,progress) {
       if(area>0)objects++;
       layers[label-1].rings.push(ring);
       if(geometry)layers[label-1].paths.push(geometry);
+      if(tonal)layers[label-1].regions.push(tonal.ids[i]);
       contours++;
     }
   }
-  return {layers:layers.filter(layer=>layer.rings.length),points:pointsTotal,contours,objects,w,h,smooth};
+  return {layers:layers.filter(layer=>layer.rings.length),points:pointsTotal,contours,objects,w,h,smooth,...(tonal?{gradients:tonal.gradients}:{})};
 }
 export function vectorize(pixels,w,h,settings,progress=()=>{}) {
   if(settings.removeWhite) dropWhite(pixels,w,h);
   progress(.17);
   const monochrome=settings.mode==="mono";
-  const colors=monochrome?[[26,32,49]]:paletteFor(pixels,w,h,settings.colors,settings.detail,settings.smooth!==false,settings.hd);
+  const smooth=settings.smooth!==false;
+  const useTones=!monochrome&&(settings.profile==="gradient"||(settings.profile==="auto"&&hasShading(pixels,w,h)));
+  const sampled=useTones?smoothTonePixels(pixels,w,h):pixels;
+  const count=useTones?Math.max(54,settings.colors*2):settings.colors;
+  const colors=monochrome?[[26,32,49]]:paletteFor(sampled,w,h,count,settings.detail,smooth,settings.hd,useTones);
   progress(.35);
-  const labels=classify(pixels,colors,monochrome?settings.threshold:null);
-  const cleaned=settings.smooth!==false&&!monochrome?cleanTransitionColors(labels,pixels,w,h,colors,settings.hd):labels;
+  const labels=classify(sampled,colors,monochrome?settings.threshold:null,useTones);
+  const cleaned=settings.smooth!==false&&!monochrome?cleanTransitionColors(labels,sampled,w,h,colors,settings.hd):labels;
   progress(.54);
-  return traceEdges(removeSpecks(cleaned,w,h,settings.noise,colors.length),w,h,colors,settings.detail,settings.smooth!==false,settings.hd,progress);
+  const shapes=removeSpecks(cleaned,w,h,useTones?Math.max(3,settings.noise):settings.noise,colors.length);
+  const tones=useTones?fitRegionTones(shapes,pixels,w,h):null;
+  return traceEdges(shapes,w,h,colors,settings.detail,smooth,settings.hd,progress,tones);
 }

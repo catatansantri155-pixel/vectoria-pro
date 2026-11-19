@@ -26,10 +26,10 @@ function simplify(points, anchors, tolerance){
   return [...kept].sort((a,b)=>a-b);
 }
 
-function fitChain(raw, detail, hd, closed){
+function fitChain(raw, detail, hd, closed, tonal){
   const last=raw.length-1;
   if(last<4)return raw.slice(1).map(end=>({end}));
-  const radius=Math.max(1,Math.min(hd?7:5,Math.floor(last/14)));
+  const radius=Math.max(1,Math.min(tonal?(hd?10:7):(hd?7:5),Math.floor(last/14)));
   const span=radius*2;
   const at=i=>raw[closed?(i+last)%last:Math.max(0,Math.min(last,i))];
   const turns=[];
@@ -103,7 +103,7 @@ function reversed(geometry){
   return result;
 }
 
-export function sharedContours(width,detail,hd){
+export function sharedContours(width,detail,hd,tonal=false){
   const cache=new Map();
   const key=([x,y])=>y*(width+1)+x;
   function chain(points,closed){
@@ -122,7 +122,7 @@ export function sharedContours(width,detail,hd){
     let geometry=cache.get(label);
     if(!geometry){
       let previous=points[0];
-      geometry=fitChain(points,detail,hd,closed).map(segment=>{
+      geometry=fitChain(points,detail,hd,closed,tonal).map(segment=>{
         const result={...segment,start:previous};previous=segment.end;
         return result;
       });
