@@ -94,7 +94,7 @@ input[type=checkbox]{width:17px;height:17px;margin:0;accent-color:var(--purple);
 #result{position:absolute;inset:0}
 #result svg,#result img{display:block;width:100%;height:100%}
 #result svg:not([shape-rendering]){shape-rendering:geometricPrecision}
-.canvas[data-view=compare] #result{clip-path:inset(0 0 0 var(--image-split,50%))}
+.canvas[data-view=compare] #result{clip-path:inset(0 0 0 var(--image-split,50%));will-change:clip-path}
 .canvas[data-pan=true]{cursor:grab;touch-action:none}
 .canvas[data-pan=true]:active{cursor:grabbing}
 .art{left:calc(50% + var(--pan-x,0px));top:calc(50% + var(--pan-y,0px))}

@@ -177,7 +177,10 @@ function renderVector(model){
   }
   if(activeSVG?.model!==model)activeSVG=null;
   if(!model){container.replaceChildren();return;}
-  const svg=outlines?new Blob([svgText(model,{outlines:true})],{type:"image/svg+xml"}):resultSVG(model);
+  const fullW=model.originalWidth??model.w,fullH=model.originalHeight??model.h;
+  const previewScale=Math.min(1,2048/Math.max(fullW,fullH));
+  const previewDims=[Math.max(1,Math.round(fullW*previewScale)),Math.max(1,Math.round(fullH*previewScale))];
+  const svg=outlines?new Blob([svgText(model,{outlines:true})],{type:"image/svg+xml"}):resultSVG(model,{dimensions:previewDims});
   const url=URL.createObjectURL(svg);
   const image=new Image();
   image.alt="";
@@ -291,7 +294,7 @@ function addFiles(files){
 function trace(pixels,w,h,options,progress){
   clearTimeout(workerIdle);
   if(!worker){
-    worker=new Worker(new URL("./trace-worker.mjs?v=24",import.meta.url),{type:"module"});
+    worker=new Worker(new URL("./trace-worker.mjs?v=26",import.meta.url),{type:"module"});
     worker.onmessage=event=>{
       const {progress,error,result}=event.data;
       if(!pending)return;
@@ -334,7 +337,7 @@ async function convert(item,options,token,progress){
   try{
     // Use native edges and color samples for ink on paper before upsampling can alter them.
     if(width>item.w&&height>item.h){
-      const {canUseMesh,wantsSmoothShading}=await import("./shading-mesh.mjs?v=3");
+      const {canUseMesh,wantsSmoothShading}=await import("./shading-mesh.mjs?v=4");
       if(token!==serial)throw new DOMException("Dibatalkan","AbortError");
       const native=sample(item.w,item.h);
       const inkPaper=options.mode==="color"&&["auto","flat"].includes(options.profile)&&detectInkPaper(native,item.w,item.h);

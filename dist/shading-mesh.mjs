@@ -4,14 +4,19 @@ const channels=[0,1,2];
 const luma=(pixels,i)=>Math.round(.2126*pixels[i]+.7152*pixels[i+1]+.0722*pixels[i+2]);
 
 export function hasSmoothShading(pixels,w,h){
+  // Gradasi yang sangat halus berubah terlalu sedikit pada jarak ±3 px untuk
+  // terbaca sebagai tren, jadi tren juga diukur pada jarak yang lebih lebar
+  // memakai rata-rata blok tegak lurus agar derau JPEG tidak ikut terbaca.
+  const step=Math.max(6,Math.min(30,Math.round(Math.min(w,h)/48)));
+  const margin=step+2;
   let continuous=0,total=0;
-  for(let y=3;y<h-3;y+=4){
-    for(let x=3;x<w-3;x+=4){
+  for(let y=margin;y<h-margin;y+=4){
+    for(let x=margin;x<w-margin;x+=4){
       const i=(y*w+x)*4;
       if(pixels[i+3]<250)continue;
       total++;
       const horizontal=trend(i,12),vertical=trend(i,w*12);
-      if(horizontal||vertical)continuous++;
+      if(horizontal||vertical||wideTrend(x,y))continuous++;
     }
   }
   return total>=40&&continuous/total>.12;
@@ -21,6 +26,27 @@ export function hasSmoothShading(pixels,w,h){
       const a=pixels[i+c]-pixels[i+c-step],b=pixels[i+c+step]-pixels[i+c];
       return a*b>0&&Math.min(Math.abs(a),Math.abs(b))>=2&&Math.max(Math.abs(a),Math.abs(b))<=22;
     });
+  }
+  function wideTrend(x,y){
+    const minDelta=Math.max(1.8,step/10),maxDelta=step*1.6;
+    const avgH=(cx,cy,c)=>{let s=0;for(const o of[-1,0,1])s+=pixels[((cy+o)*w+cx)*4+c];return s/3;};
+    const avgV=(cx,cy,c)=>{let s=0;for(const o of[-1,0,1])s+=pixels[(cy*w+cx+o)*4+c];return s/3;};
+    const runs=(a,m,b)=>{
+      const d1=m-a,d2=b-m;
+      return d1*d2>0&&Math.min(Math.abs(d1),Math.abs(d2))>=minDelta&&Math.max(Math.abs(d1),Math.abs(d2))<=maxDelta;
+    };
+    const spread=(c)=>{
+      let mn=255,mx=0;
+      for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+        const v=pixels[((y+dy)*w+x+dx)*4+c];
+        if(v<mn)mn=v;
+        if(v>mx)mx=v;
+      }
+      return mx-mn;
+    };
+    return channels.some(c=>spread(c)<=12&&(
+      runs(avgH(x-step,y,c),avgH(x,y,c),avgH(x+step,y,c))||
+      runs(avgV(x,y-step,c),avgV(x,y,c),avgV(x,y+step,c))));
   }
 }
 

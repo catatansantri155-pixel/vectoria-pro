@@ -1,4 +1,4 @@
-import {canUseMesh,hasSmoothShading,shadingMesh,wantsSmoothShading} from "./shading-mesh.mjs?v=3";
+import {canUseMesh,hasSmoothShading,shadingMesh,wantsSmoothShading} from "./shading-mesh.mjs?v=4";
 import {isoRings,reinforceInkStrokes,roundInkJoins,steadyInkRing} from "./ink-contours.mjs?v=20";
 import {fitRegionTones,hasShading,smoothTonePixels} from "./tones.mjs?v=14";
 import {sharedContours} from "./contours.mjs?v=18";
@@ -461,8 +461,13 @@ export function vectorize(pixels,w,h,settings,progress=()=>{}) {
   const paper=isolatedPaper??(!monochrome&&(settings.profile==="auto"||settings.profile==="flat")?detectInkPaper(pixels,w,h):null);
   if(!monochrome&&paper)return traceInk(pixels,w,h,settings,paper,!settings.removeWhite&&!isolatedPaper,progress);
   if(wantsSmoothShading(pixels,w,h,settings)){
-    if(canUseMesh(pixels,w,h))return shadingMesh(pixels,w,h,{detail:settings.detail,gray:monochrome,hd:settings.hd},progress);
-    if(monochrome&&settings.monoStyle==="tone")throw Error("Gradasi abu-abu memerlukan gambar tanpa transparansi. Gunakan JPG atau pilih Siluet hitam-putih.");
+    if(canUseMesh(pixels,w,h)){
+      const mesh=shadingMesh(pixels,w,h,{detail:settings.detail,gray:monochrome,hd:settings.hd},progress);
+      // Pada gambar bertekstur atau penuh derau, mesh bisa meledak menjadi
+      // jutaan titik dan berkas raksasa; kembali ke pelacakan kontur.
+      if(mesh.points<=300000||(monochrome&&settings.monoStyle==="tone"))return mesh;
+    }
+    else if(monochrome&&settings.monoStyle==="tone")throw Error("Gradasi abu-abu memerlukan gambar tanpa transparansi. Gunakan JPG atau pilih Siluet hitam-putih.");
   }
   if(monochrome){
     const subject=settings.monoAuto&&!settings.monoInvert?colorSubjectOnNeutral(pixels,w,h):null;
