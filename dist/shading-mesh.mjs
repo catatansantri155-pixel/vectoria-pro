@@ -1,3 +1,5 @@
+import {resample} from "./resample.mjs?v=14";
+
 const channels=[0,1,2];
 const luma=(pixels,i)=>Math.round(.2126*pixels[i]+.7152*pixels[i+1]+.0722*pixels[i+2]);
 const hex=value=>value.toString(16).padStart(2,"0");
@@ -43,28 +45,38 @@ export function canUseMesh(pixels,w,h){
   return true;
 }
 
-export function shadingMesh(pixels,w,h,{detail,gray},progress){
-  const scale=Math.min(1,1200/Math.max(w,h));
-  const cols=Math.max(2,Math.round(w*scale)),height=Math.max(2,Math.round(h*scale));
+function meshSamples(pixels,w,h,cols,height,gray,hd){
+  const source=w===cols&&h===height?pixels:resample(pixels,w,h,cols,height,hd);
   const samples=new Uint8Array(cols*height*3);
+  const light=Uint8Array.from({length:cols*height},(_,i)=>luma(source,i*4));
   for(let y=0;y<height;y++){
-    const fy=Math.min(h-1,Math.max(0,(y+.5)*h/height-.5)),a=Math.floor(fy),b=Math.min(h-1,a+1),v=fy-a;
     for(let x=0;x<cols;x++){
-      const fx=Math.min(w-1,Math.max(0,(x+.5)*w/cols-.5)),l=Math.floor(fx),r=Math.min(w-1,l+1),u=fx-l;
-      const i=(a*w+l)*4,j=(a*w+r)*4,k=(b*w+l)*4,m=(b*w+r)*4;
-      const to=(y*cols+x)*3;
-      for(const c of channels){
-        const value=(pixels[i+c]*(1-u)+pixels[j+c]*u)*(1-v)+(pixels[k+c]*(1-u)+pixels[m+c]*u)*v;
-        samples[to+c]=Math.round(value);
+      const i=y*cols+x,from=i*4,to=i*3;
+      let adjustment=0;
+      if(hd&&y>0&&y<height-1&&x>0&&x<cols-1){
+        const offset=cols*2;
+        const left=i-Math.min(2,x),right=i+Math.min(2,cols-1-x);
+        const top=y>1?i-offset:i-cols,bottom=y<height-2?i+offset:i+cols;
+        const middle=light[i],average=(light[left]+light[right]+light[top]+light[bottom])*.25;
+        const detail=middle-average;
+        if(Math.abs(detail)>2){
+          const min=Math.min(source[from],source[from+1],source[from+2]);
+          const max=Math.max(source[from],source[from+1],source[from+2]);
+          adjustment=Math.round(Math.min(255-max,4,Math.max(-min,-4,detail*.32)));
+        }
       }
-      if(gray){
-        const value=luma(samples,to);
-        samples[to]=samples[to+1]=samples[to+2]=value;
-      }
+      for(const c of channels)samples[to+c]=(gray?light[i]:source[from+c])+adjustment;
     }
   }
-  const maxSpan=[14,11,8,6,4][detail],verticalError=[20,16,12,9,7][detail],
-    horizontalError=[8,6,4,3,2][detail];
+  return samples;
+}
+
+export function shadingMesh(pixels,w,h,{detail,gray,hd},progress){
+  const scale=Math.min(hd?2:1,(hd?1536:1200)/Math.max(w,h),Math.sqrt(1.8e6/(w*h)));
+  const cols=Math.max(2,Math.round(w*scale)),height=Math.max(2,Math.round(h*scale));
+  const samples=meshSamples(pixels,w,h,cols,height,gray,hd);
+  const maxSpan=[14,11,8,6,4][detail]*(hd?2:1),verticalError=[19,14,8,6,5][detail],
+    horizontalError=[8,6,3,2,2][detail];
   const stride=cols*3,rows=[];
   function addRows(a,b){
     if(b-a<2){rows.push(a);return;}

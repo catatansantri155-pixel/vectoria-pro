@@ -1,4 +1,4 @@
-import {canUseMesh,shadingMesh,wantsSmoothShading} from "./shading-mesh.mjs?v=1";
+import {canUseMesh,hasSmoothShading,shadingMesh,wantsSmoothShading} from "./shading-mesh.mjs?v=2";
 import {isoRings,reinforceInkStrokes,roundInkJoins,steadyInkRing} from "./ink-contours.mjs?v=20";
 import {fitRegionTones,hasShading,smoothTonePixels} from "./tones.mjs?v=14";
 import {sharedContours} from "./contours.mjs?v=18";
@@ -345,18 +345,57 @@ function traceExact(pixels,w,h,progress){
   return {w,h,exact:true,layers:[...layers.values()],objects,points:objects*4};
 }
 
-function traceMonoLayer(pixels,w,h,settings,threshold,invert,color,noise,progress,protectStrokes=false){
+function colorSubjectOnNeutral(pixels,w,h){
+  if(!canUseMesh(pixels,w,h)||!hasSmoothShading(pixels,w,h))return null;
+  const edge=[];
+  function sample(i){
+    const min=Math.min(pixels[i],pixels[i+1],pixels[i+2]);
+    const max=Math.max(pixels[i],pixels[i+1],pixels[i+2]);
+    if(max-min<=13&&min>=172)edge.push(luminance(pixels,i));
+  }
+  let total=0,colored=0;
+  for(let x=0;x<w;x+=4){sample(x*4);sample(((h-1)*w+x)*4);total+=2;}
+  for(let y=0;y<h;y+=4){sample(y*w*4);sample((y*w+w-1)*4);total+=2;}
+  if(edge.length<total*.94)return null;
+  for(let i=0;i<pixels.length;i+=64){
+    if(Math.max(pixels[i],pixels[i+1],pixels[i+2])-Math.min(pixels[i],pixels[i+1],pixels[i+2])>35)colored++;
+  }
+  if(colored<pixels.length/64*.04)return null;
+  edge.sort((a,b)=>a-b);
+  return {threshold:Math.min(151,edge[Math.floor(edge.length*.1)]-38),chroma:22};
+}
+
+function traceMonoLayer(pixels,w,h,settings,threshold,invert,color,noise,progress,protectStrokes=false,subject=null){
   const stride=w+2,field=new Float32Array(stride*(h+2));
   field.fill(-127.5);
   const direction=invert?1:-1;
   for(let y=0;y<h;y++){
     for(let x=0;x<w;x++){
       const offset=(y*w+x)*4;
-      const value=Math.min(direction*(luminance(pixels,offset)-threshold+.5),pixels[offset+3]-127.5);
-      field[(y+1)*stride+x+1]=value;
+      const brightness=luminance(pixels,offset);
+      let ink=direction*(brightness-threshold+.5);
+      if(subject){
+        const r=pixels[offset],g=pixels[offset+1],b=pixels[offset+2];
+        const chroma=Math.max(r,g,b)-Math.min(r,g,b);
+        // Reflective whites can be tinted by surrounding colors, especially around eyes and teeth.
+        const neutralLimit=subject.chroma+Math.max(0,Math.min(27,(brightness-150)*.52));
+        const darkCut=Math.min(threshold,119+3*chroma);
+        ink=Math.max(darkCut-brightness+.5,(chroma-neutralLimit)*2);
+      }
+      field[(y+1)*stride+x+1]=Math.min(ink,pixels[offset+3]-127.5);
     }
   }
-  if(protectStrokes)reinforceInkStrokes(field,pixels,w,h);
+  if(subject){
+    const updated=field.slice();
+    // Subpixel tracing follows a smoothed signed boundary in full-color source data.
+    for(let y=1;y<=h;y++){
+      for(let x=1;x<=w;x++){
+        const i=y*stride+x;
+        updated[i]=(field[i]*4+field[i-1]+field[i+1]+field[i-stride]+field[i+stride])/8;
+      }
+    }
+    field.set(updated);
+  }else if(protectStrokes)reinforceInkStrokes(field,pixels,w,h);
   if(noise){
     const labels=new Uint8Array(w*h);
     for(let y=0;y<h;y++){
@@ -382,7 +421,7 @@ function traceMonoLayer(pixels,w,h,settings,threshold,invert,color,noise,progres
     for(let i=0,j=ring.length-1;i<ring.length;j=i++){
       area+=ring[j][0]*ring[i][1]-ring[i][0]*ring[j][1];
     }
-    if(area===0)continue;
+    if(area===0||(subject&&Math.abs(area)<4))continue;
     if(area>0)objects++;
     const path=tolerance?roundInkJoins(ring,.18):null;
     if(path)paths.push(path);
@@ -422,12 +461,13 @@ export function vectorize(pixels,w,h,settings,progress=()=>{}) {
   const paper=isolatedPaper??(!monochrome&&(settings.profile==="auto"||settings.profile==="flat")?detectInkPaper(pixels,w,h):null);
   if(!monochrome&&paper)return traceInk(pixels,w,h,settings,paper,!settings.removeWhite&&!isolatedPaper,progress);
   if(wantsSmoothShading(pixels,w,h,settings)){
-    if(canUseMesh(pixels,w,h))return shadingMesh(pixels,w,h,{detail:settings.detail,gray:monochrome},progress);
+    if(canUseMesh(pixels,w,h))return shadingMesh(pixels,w,h,{detail:settings.detail,gray:monochrome,hd:settings.hd},progress);
     if(monochrome&&settings.monoStyle==="tone")throw Error("Gradasi abu-abu memerlukan gambar tanpa transparansi. Gunakan JPG atau pilih Siluet hitam-putih.");
   }
   if(monochrome){
-    const threshold=settings.monoAuto?monoThreshold(pixels):settings.threshold;
-    const model=traceMonoLayer(pixels,w,h,settings,threshold,Boolean(settings.monoInvert),[0,0,0],Math.max(0,settings.noise-2),progress,settings.monoAuto);
+    const subject=settings.monoAuto&&!settings.monoInvert?colorSubjectOnNeutral(pixels,w,h):null;
+    const threshold=subject?.threshold??(settings.monoAuto?monoThreshold(pixels):settings.threshold);
+    const model=traceMonoLayer(pixels,w,h,settings,threshold,Boolean(settings.monoInvert),[0,0,0],Math.max(0,settings.noise-2),progress,settings.monoAuto,subject);
     if(settings.monoBackground==="white")model.backgroundFill="#ffffff";
     return model;
   }

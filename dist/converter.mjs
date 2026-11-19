@@ -2,7 +2,7 @@ import {epsText,outputSize,pdfText,rasterSize,svgText,traceSize,zipFiles} from "
 import {setupUtilities} from "./utilities.mjs?v=14";
 import {loadImage,prepareImageFile} from "./image-codec.mjs?v=14";
 import {detectIcons,detectInkPaper,gridIcons,removeBorderColor} from "./sheet.mjs?v=17";
-import {canUseMesh,wantsSmoothShading} from "./shading-mesh.mjs?v=1";
+import {canUseMesh,wantsSmoothShading} from "./shading-mesh.mjs?v=2";
 import {mountIcons} from "./icons.mjs";
 
 const $=id=>document.getElementById(id);
@@ -271,7 +271,7 @@ function addFiles(files){
 }
 function trace(pixels,w,h,options,progress){
   if(!worker){
-    worker=new Worker(new URL("./trace-worker.mjs?v=22",import.meta.url),{type:"module"});
+    worker=new Worker(new URL("./trace-worker.mjs?v=23",import.meta.url),{type:"module"});
     worker.onmessage=event=>{
       const {progress,error,result}=event.data;
       if(!pending)return;

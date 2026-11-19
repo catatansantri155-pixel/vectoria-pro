@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-title" content="Vektora">
 <script type="module" src="pwa.mjs?v=1"></script>
 <link rel="stylesheet" href="converter.css?v=16">
-<script type="module" src="converter.mjs?v=22"></script>
+<script type="module" src="converter.mjs?v=23"></script>
 </head>
 <body>
 <header class="header"><div class="header-inner">
@@ -48,11 +48,11 @@
         <label id="profileControl" class="stack">Gaya pelacakan<select id="traceProfile"><option value="auto">Otomatis · kurva halus</option><option value="exact">Presisi piksel · warna &amp; bentuk asli</option><option value="flat">Logo dan ikon datar</option><option value="gradient">Ilustrasi 3D dan gradasi</option></select></label>
         <p id="exactHelp" class="setting-note" hidden>Mempertahankan kisi piksel dan warna sumber. Jika sumber berpiksel, kotaknya tetap terlihat saat diperbesar. Gunakan Otomatis untuk tepi halus.</p>
         <div id="detailControl" class="control"><label for="detail">Detail bentuk</label><output id="detailOut" for="detail">Seimbang</output><input id="detail" type="range" min="0" max="4" value="2"><div class="range-ends"><span>Sederhana</span><span>Sangat detail</span></div></div>
-        <label id="hdControl" class="quality-option"><input id="traceHD" type="checkbox" checked><span><strong>Trace HD</strong><small>Sampel lebih rapat untuk kontur yang lebih halus.</small></span></label>
+        <label id="hdControl" class="quality-option"><input id="traceHD" type="checkbox" checked><span><strong>Trace HD</strong><small>Detail kontur lebih rapat. Pada gradasi 3D, tepi diperjelas dengan sampel hingga 2×.</small></span></label>
         <label id="smoothControl" class="quality-option"><input id="smoothCurves" type="checkbox" checked><span><strong>Kurva halus</strong><small>Haluskan tepi dan rapatkan batas antarwarna.</small></span></label>
         <div id="monoControls" class="stack" hidden>
           <label class="stack">Tampilan monokrom<select id="monoStyle"><option value="auto">Otomatis</option><option value="tone">Gradasi abu-abu · 3D</option><option value="ink">Siluet hitam-putih</option></select></label>
-          <p id="monoToneHelp" class="setting-note" hidden>Mempertahankan volume, bayangan, dan latar dari gambar sumber tanpa transparansi.</p>
+          <p id="monoToneHelp" class="setting-note" hidden>Mempertahankan volume, bayangan, dan latar gambar tanpa transparansi. Aktifkan Trace HD untuk tepi yang lebih tajam.</p>
           <label class="stack" id="monoPolarityControl">Bagian yang dijadikan hitam<select id="monoPolarity"><option value="dark">Bagian gelap</option><option value="light">Bagian terang</option></select></label>
           <label class="stack" id="monoBackgroundControl">Latar monokrom<select id="monoBackground"><option value="white">Putih</option><option value="transparent">Transparan</option></select></label>
           <label class="check" id="monoAutoControl"><input id="monoAuto" type="checkbox" checked> Ambang otomatis</label>
