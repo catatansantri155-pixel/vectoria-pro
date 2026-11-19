@@ -6,18 +6,23 @@
 <meta name="theme-color" content="#f7f6fb">
 <meta name="description" content="Editor vektor sentuh dengan ekspor SVG dan pemeriksaan aset untuk Adobe Stock.">
 <title>Vektora Studio — Editor vektor</title>
-<link rel="icon" href="assets/mark.svg?v=5" type="image/svg+xml">
-<link rel="stylesheet" href="style.css?v=7">
+<link rel="icon" href="assets/vektora-192.png" type="image/png">
+<link rel="apple-touch-icon" href="assets/vektora-apple-180.png">
+<link rel="manifest" href="app.webmanifest?v=6">
+<meta name="apple-mobile-web-app-title" content="Vektora">
+<script type="module" src="pwa.mjs?v=1"></script>
+<link rel="stylesheet" href="style.css?v=8">
 <script type="module" src="editor.mjs?v=7"></script>
 </head>
 <body>
 <header class="topbar">
-  <a class="brand" href="./" aria-label="Vektora Studio"><img class="logo" src="assets/mark.svg?v=5" width="37" height="37" alt=""><span>Vektora<span class="brand-sub"> STUDIO</span></span></a>
+  <a class="brand" href="./" aria-label="Vektora Studio"><img class="logo" src="assets/vektora-192.png" width="37" height="37" alt=""><span>Vektora<span class="brand-sub"> STUDIO</span></span></a>
   <div class="project-head">
     <button id="project" class="project" data-icon="folder"><span id="projectName">Botanical Study</span><span data-icon="chevron"></span></button>
     <span id="saveState" class="saved" role="status"><i></i><span>Tersimpan di perangkat</span></span>
   </div>
   <div class="top-actions">
+    <button id="installApp" class="icon-btn" type="button" data-icon="download" aria-label="Pasang Vektora Studio" title="Pasang Vektora Studio" hidden></button>
     <button id="help" class="icon-btn help" data-icon="help" aria-label="Panduan"></button>
   </div>
 </header>
@@ -63,5 +68,11 @@
 <dialog id="modal"><div class="modal-head"><h2 id="modalTitle"></h2><button id="modalClose" class="icon-btn" data-icon="close" aria-label="Tutup"></button></div><div id="modalBody"></div></dialog>
 <div id="toast" class="toast" role="status" hidden></div>
 <input type="file" id="importProject" accept=".json,application/json" hidden>
+<dialog id="installHelp" aria-labelledby="installTitle">
+  <div class="modal-head"><h2 id="installTitle">Pasang Vektora Studio</h2></div>
+  <p id="installApple" hidden>Di Safari, ketuk <strong>Bagikan</strong>, lalu pilih <strong>Tambahkan ke Layar Utama</strong>. Aktifkan <strong>Buka sebagai App Web</strong> jika tersedia, lalu ketuk <strong>Tambah</strong>.</p>
+  <p id="installBrowser" hidden>Buka menu browser dan pilih <strong>Instal aplikasi</strong> atau <strong>Tambahkan ke layar utama</strong>, jika tersedia.</p>
+  <form method="dialog"><button class="primary" type="submit">Tutup</button></form>
+</dialog>
 </body>
 </html>

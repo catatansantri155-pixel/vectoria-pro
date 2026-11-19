@@ -263,3 +263,10 @@ h2{font-weight:630}
 #sliceOverlay rect{fill:none;stroke:#7147df;stroke-width:1.5px;vector-effect:non-scaling-stroke}
 
 .setting-note{margin:0;color:var(--muted);font-size:.8rem;line-height:1.5}
+
+.header{position:sticky;top:0;z-index:6;padding-top:env(safe-area-inset-top);box-shadow:0 2px 12px #34265612}
+.header-actions{display:flex;gap:8px;align-items:center}
+.install-button{min-height:44px;padding-inline:12px;border:1px solid #e6ddfb;background:#f4edff;color:#4828a2;border-radius:22px}
+.install-button:hover{background:#ebe0ff}
+#previewTitle{scroll-margin-top:calc(76px + env(safe-area-inset-top))}
+@media(max-width:360px){.header-inner{gap:7px}.header-actions{gap:5px}.install-button{padding-inline:8px}}

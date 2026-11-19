@@ -1,7 +1,7 @@
-const cacheName="vektora-converter-v20";
+const cacheName="vektora-converter-v21";
 const assets=[
-  "./","./converter.css?v=15","./converter.mjs?v=20","./icons.mjs","./trace-worker.mjs?v=20","./trace.mjs?v=20","./contours.mjs?v=18","./ink-contours.mjs?v=20","./formats.mjs?v=17","./sheet.mjs?v=17","./utilities.mjs?v=14","./image-codec.mjs?v=14","./tones.mjs?v=14","./resample-worker.mjs?v=14","./resample.mjs?v=14","./app.webmanifest?v=5",
-  "./editor.html","./style.css?v=7","./editor.mjs?v=7","./assets/mark.svg?v=5","./assets/mark-192.png?v=5","./assets/mark-512.png?v=5","./assets/botanika.jpg"
+  "./","./converter.css?v=16","./converter.mjs?v=21","./icons.mjs","./trace-worker.mjs?v=20","./trace.mjs?v=20","./contours.mjs?v=18","./ink-contours.mjs?v=20","./formats.mjs?v=17","./sheet.mjs?v=17","./utilities.mjs?v=14","./image-codec.mjs?v=14","./tones.mjs?v=14","./resample-worker.mjs?v=14","./resample.mjs?v=14","./app.webmanifest?v=6","./pwa.mjs?v=1",
+  "./editor.html","./style.css?v=8","./editor.mjs?v=7","./assets/vektora-192.png","./assets/vektora-512.png","./assets/vektora-apple-180.png","./assets/vektora-maskable-512.png","./assets/botanika.jpg"
 ];
 self.addEventListener("install",event=>{
   event.waitUntil((async()=>{
@@ -30,12 +30,18 @@ self.addEventListener("activate",event=>{
 self.addEventListener("fetch",event=>{
   if(event.request.method!=="GET") return;
   const url=new URL(event.request.url);
-  const editorAlias = new URL("./editor",self.registration.scope).href;
-  const asset = url.href===editorAlias ? "./editor.html"
-    : assets.find(path=>new URL(path,self.registration.scope).href===url.href);
+  const scope=new URL(self.registration.scope);
+  if(url.origin!==scope.origin||!url.pathname.startsWith(scope.pathname))return;
+  const page=url.pathname.slice(scope.pathname.length);
+  const navigation=event.request.mode==="navigate";
+  const asset=navigation&&["","index.html"].includes(page)?"./"
+    : navigation&&["editor","editor.html"].includes(page)?"./editor.html"
+    : assets.find(path=>new URL(path,scope).href===url.href);
   if(!asset)return;
-  if(event.request.mode==="navigate"){
-    event.respondWith(fetch(event.request).catch(()=>caches.match(asset)));
+  if(navigation){
+    event.respondWith(fetch(event.request).then(response=>{
+      return response.status>=500?caches.match(asset).then(cached=>cached||response):response;
+    }).catch(()=>caches.match(asset)));
   }else{
     event.respondWith(caches.match(asset).then(hit=>hit||fetch(event.request)));
   }

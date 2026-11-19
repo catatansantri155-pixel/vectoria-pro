@@ -7,15 +7,21 @@
 <meta name="description" content="Ubah JPG, PNG dan gambar lain menjadi SVG dan EPS yang bisa diedit, langsung di HP.">
 <meta name="vektora-app" content="converter">
 <title>Vektora Studio — Konverter gambar ke vektor</title>
-<link rel="icon" href="assets/mark.svg?v=5" type="image/svg+xml">
-<link rel="manifest" href="app.webmanifest?v=5">
-<link rel="stylesheet" href="converter.css?v=15">
-<script type="module" src="converter.mjs?v=20"></script>
+<link rel="icon" href="assets/vektora-192.png" type="image/png">
+<link rel="apple-touch-icon" href="assets/vektora-apple-180.png">
+<link rel="manifest" href="app.webmanifest?v=6">
+<meta name="apple-mobile-web-app-title" content="Vektora">
+<script type="module" src="pwa.mjs?v=1"></script>
+<link rel="stylesheet" href="converter.css?v=16">
+<script type="module" src="converter.mjs?v=21"></script>
 </head>
 <body>
 <header class="header"><div class="header-inner">
-  <a href="./" class="brand"><img src="assets/mark.svg?v=5" alt="" width="35" height="35"><span>Vektora <small>STUDIO</small></span></a>
-  <button type="button" class="icon top-help" id="help" data-icon="help" aria-label="Panduan"></button>
+  <a href="./" class="brand"><img src="assets/vektora-192.png" alt="" width="35" height="35"><span>Vektora <small>STUDIO</small></span></a>
+  <div class="header-actions">
+    <button type="button" class="button install-button" id="installApp" data-icon="download" hidden>Pasang<span class="sr"> Vektora Studio</span></button>
+    <button type="button" class="icon top-help" id="help" data-icon="help" aria-label="Panduan"></button>
+  </div>
 </div></header>
 <main id="vector" class="page">
   <section class="intro">
@@ -162,5 +168,11 @@
 </div>
 <dialog id="guide"><div class="card-head"><h2>Panduan Vektora</h2><button class="icon" id="closeGuide" aria-label="Tutup panduan" data-icon="close"></button></div><p>Pilih gambar, atur detail dan warna, lalu ketuk <strong>Buat vektor</strong>. Logo, ikon, dan ilustrasi warna datar biasanya menghasilkan kontur yang paling bersih.</p><p>Mode monokrom mengubah piksel gelap menjadi satu warna. Untuk GIF, yang diproses adalah gambar yang didekode browser, biasanya frame pertama.</p><p>Unduh satu file SVG atau EPS untuk unggahan Adobe Stock. ZIP digunakan untuk mengambil banyak file sekaligus. Periksa detail dan hak penggunaan sebelum mengunggah.</p><p>Untuk membuka studio saat offline, jalankan situs sekali saat terhubung dan tunggu aset selesai disimpan di browser.</p></dialog>
 <div id="notice" role="alert" hidden></div>
+<dialog id="installHelp" aria-labelledby="installTitle">
+  <div class="card-head"><h2 id="installTitle">Pasang Vektora Studio</h2></div>
+  <p id="installApple" hidden>Di Safari, ketuk <strong>Bagikan</strong>, lalu pilih <strong>Tambahkan ke Layar Utama</strong>. Aktifkan <strong>Buka sebagai App Web</strong> jika tersedia, lalu ketuk <strong>Tambah</strong>.</p>
+  <p id="installBrowser" hidden>Buka menu browser dan pilih <strong>Instal aplikasi</strong> atau <strong>Tambahkan ke layar utama</strong>, jika tersedia.</p>
+  <form method="dialog"><button class="button primary" type="submit">Tutup</button></form>
+</dialog>
 </body>
 </html>

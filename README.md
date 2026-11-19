@@ -62,6 +62,10 @@ Buka [localhost:8000](http://localhost:8000/). Untuk uji cepat, klik **Coba cont
 - Studio Perbesar memiliki ekspor 4K dan interpolasi Lanczos atau Mitchell–Netravali untuk gambar yang sesuai batas memori. Perbesaran tidak merekonstruksi detail yang hilang.
 
 
+### Instal sebagai aplikasi
+
+Buka Vektora melalui HTTPS (atau localhost), lalu pilih **Pasang**. Jika prompt sistem tidak muncul, menu browser dapat menyediakan opsi instalasi. Pada iPhone dan iPad, buka di Safari dan gunakan **Bagikan → Tambahkan ke Layar Utama**. Studio dan editor tersedia offline setelah halaman dan aset selesai disimpan saat kunjungan online pertama.
+
 ### Presisi piksel dan monokrom
 
 - **Presisi piksel** menyimpan warna dan transparansi piksel yang terbaca di browser sebagai bidang vektor pada resolusi sumber. Kontur mengikuti kisi sumber, sehingga kotak yang sudah ada tetap terlihat saat diperbesar. **Otomatis** membentuk kurva halus dan dapat menyesuaikan warna serta kontur. Presisi piksel dibatasi 4,5 MP, 8.192 px per sisi, 1,2 juta bidang, dan 260.000 kombinasi warna dan transparansi. Gunakan SVG atau PNG untuk transparansi parsial.

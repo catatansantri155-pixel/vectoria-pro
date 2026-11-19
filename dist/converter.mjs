@@ -606,4 +606,3 @@ document.querySelectorAll("button[data-studio]").forEach(button=>button.onclick=
 });
 updateSettings();
 sample();
-if("serviceWorker" in navigator)navigator.serviceWorker.register("./sw.js").catch(()=>{});
