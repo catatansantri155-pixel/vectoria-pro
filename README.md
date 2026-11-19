@@ -1,6 +1,6 @@
 # Vectoria Pro · Vektora Studio
 
-Konverter JPG, PNG, WebP, BMP, GIF, dan AVIF dengan pemrosesan lokal. GIF diproses sebagai satu gambar. Format yang dapat dibuka mengikuti decoder browser. Batas masukan 20 MB per file dan 60 MP. Maksimal 30 gambar diproses berurutan dalam satu sesi.
+Konverter JPG, PNG, WebP, BMP, GIF, dan AVIF dengan pemrosesan lokal. GIF diproses sebagai satu gambar. Format yang dapat dibuka mengikuti decoder browser. Batas masukan 20 MB per file dan 60 MP. Vektor, Perbesar, dan Pola menerima sampai 200 gambar per antrean. Gambar diproses berurutan. Hasil Vektor diunduh sebagai ZIP SVG, sedangkan Perbesar dan Pola mendukung ZIP PNG atau JPG.
 
 ## Studio
 
@@ -20,7 +20,7 @@ Konverter JPG, PNG, WebP, BMP, GIF, dan AVIF dengan pemrosesan lokal. GIF dipros
 1. `converter.mjs` mendekode gambar, mengambil piksel dan mengatur antrean serta perbandingan.
 2. `trace-worker.mjs` menjalankan kuantisasi warna, pembersihan bintik, pelacakan kontur dan simplifikasi titik melalui `trace.mjs`. Trace HD mengambil sampel hingga 2× lebih rapat sebelum tracing memakai interpolasi bawaan browser (bukan Lanczos), dengan batas sisi terpanjang 2.400 px dan luas 4,5 MP. Foto, gradien halus, dan tekstur berubah menjadi bidang warna. Transparansi diproses sebagai masker biner. Fokus hasil adalah ikon, logo, dan ilustrasi.
 3. `formats.mjs` menulis path SVG, PostScript EPS, PDF dan ZIP lokal. Preset Adobe Stock menyesuaikan ukuran artboard sekitar 16 MP dengan mempertahankan proporsi. Ukuran artboard berbeda dari resolusi yang digunakan untuk tracing.
-4. `utilities.mjs` berisi pengolahan raster dan perekaman gradien. `sw.js` menyimpan aset aplikasi untuk akses offline setelah pemasangan berhasil di browser. Gambar sumber, antrean, dan hasil konversi tetap dalam memori selama halaman aktif.
+4. `utilities.mjs` berisi pengolahan raster dan perekaman gradien. `sw.js` menyimpan aset aplikasi untuk akses offline setelah pemasangan berhasil di browser. Gambar sumber, antrean, dan hasil konversi tersedia selama halaman aktif. Antrean menyimpan hasil sebagai Blob dan merender pratinjau hanya untuk gambar yang dipilih.
 
 ## Deploy ke Cloudflare Pages
 

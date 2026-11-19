@@ -44,7 +44,7 @@ function gradient(canvas,opts,texture,offset=0){
   }
   g.putImageData(image,0,0);
 }
-function resizeInWorker(image,canvas,sharp,signal){
+function resizeInWorker(image,canvas,sharp,signal,session){
   const w=image.naturalWidth,h=image.naturalHeight;
   // Downscaled or very large sources use the browser path to bound input-memory costs.
   if(typeof Worker!=="function"||w*h>9e6||canvas.width<w||canvas.height<h){
@@ -60,10 +60,15 @@ function resizeInWorker(image,canvas,sharp,signal){
   const pixels=input.getImageData(0,0,w,h).data;
   source.width=source.height=0;
   return new Promise((resolve,reject)=>{
-    const worker=new Worker(new URL("./resample-worker.mjs?v=15",import.meta.url),{type:"module"});
-    function close(){
+    const worker=session?.worker??new Worker(new URL("./resample-worker.mjs?v=15",import.meta.url),{type:"module"});
+    if(session)session.worker=worker;
+    function close(reuse=false){
       signal.removeEventListener("abort",cancel);
-      worker.terminate();
+      worker.onmessage=worker.onerror=null;
+      if(!reuse||!session){
+        worker.terminate();
+        if(session)session.worker=null;
+      }
     }
     function cancel(){
       close();
@@ -72,13 +77,16 @@ function resizeInWorker(image,canvas,sharp,signal){
     if(signal.aborted){cancel();return;}
     signal.addEventListener("abort",cancel,{once:true});
     worker.onmessage=({data})=>{
-      close();
+      close(!data.error);
       if(data.error){reject(Error(data.error));return;}
-      canvas.getContext("2d").putImageData(new ImageData(data.output,canvas.width,canvas.height),0,0);
-      resolve(true);
+      try{
+        canvas.getContext("2d").putImageData(new ImageData(data.output,canvas.width,canvas.height),0,0);
+        resolve(true);
+      }catch(error){reject(error);}
     };
     worker.onerror=()=>{close();reject(Error("Mesin upscale gagal berjalan di browser ini."));};
-    worker.postMessage({pixels,w,h,width:canvas.width,height:canvas.height,sharp},[pixels.buffer]);
+    try{worker.postMessage({pixels,w,h,width:canvas.width,height:canvas.height,sharp},[pixels.buffer]);}
+    catch(error){close();reject(error);}
   });
 }
 function pattern(canvas,image,style){
@@ -128,16 +136,50 @@ async function recordLoop(opts,mime,onProgress){
   }finally{for(const track of stream.getTracks())track.stop();}
 }
 
-export function setupUtilities({$,notify,saveFile,checkFile,loadImage,prepareImageFile,rasterBlob,sampleUrl}){
+export function setupUtilities({$,notify,saveFile,collectBatch,fileName,zipFiles,loadImage,prepareImageFile,rasterBlob,sampleUrl}){
   let kind="upscale",source=sampleUrl,base="botanika",serial=0,ready=false,lastGradient=null,recording=false;
+  let queue=[],batchController=null,batchExport=null;
+  const batchSelect=$("utilityQueue"),batchProgress=$("utilityProgress");
+  const batchStatus=message=>$("utilityBatchStatus").textContent=message;
   const availableVideo=videoType();
   const preview=$("utilityCanvas"),view=$("upscalePreviewMode"),split=$("upscaleSplitRange");
   let output=null,previewSource=null,controller,previewFrame=0;
   const state=message=>$("utilityStatus").textContent=message;
   function setReady(value){
     ready=value;
-    $("utilityDownload").disabled=!ready||recording;
+    $("utilityDownload").disabled=!ready||recording||Boolean(batchController);
     split.disabled=!ready||kind!=="upscale";
+  }
+  function refreshBatch(){
+    const busy=Boolean(batchController), queued=kind!=="gradient"&&queue.length>1;
+    $("utilityQueueBox").hidden=!queued;
+    for(const id of ["utilityRun","utilityChoose","utilitySample","utilityFormat","upscaleFactor","sharpen","patternStyle","utilityQueue"])$(id).disabled=busy;
+    $("utilityRun").lastChild.textContent=queued?`Proses ${queue.length} gambar`:"Buat hasil";
+    $("utilityCancel").hidden=batchProgress.hidden=!busy;
+    $("utilityBatchDownload").disabled=busy||Boolean(batchExport)||!queue.some(job=>job.blob);
+    $("utilityBatchDownload").lastChild.textContent=batchExport?"Menyiapkan ZIP…":"Unduh hasil (.zip)";
+    setReady(ready);
+  }
+  function queueLabel(job,index){
+    const state=job.error?"gagal":job.blob?"selesai":"menunggu";
+    return `${index+1}. ${job.file.name} · ${state}`;
+  }
+  function resetBatch(){
+    batchExport=null;
+    for(const [index,job] of queue.entries()){
+      job.blob=null;job.error=null;
+      batchSelect.options[index].text=queueLabel(job,index);
+    }
+    if(queue.length>1)batchStatus(`${queue.length} gambar siap diproses.`);
+    refreshBatch();
+  }
+  function clearPreview(){
+    serial++;
+    controller?.abort();
+    if(output instanceof HTMLCanvasElement)output.width=output.height=0;
+    output=previewSource=null;
+    preview.getContext("2d").clearRect(0,0,preview.width,preview.height);
+    setReady(false);
   }
   function paintPreview(){
     $("upscaleSplit").hidden=kind!=="upscale"||view.value!=="compare";
@@ -193,6 +235,141 @@ export function setupUtilities({$,notify,saveFile,checkFile,loadImage,prepareIma
     $("gradientSecond").value=second;
   }
   setPalette();
+  function rasterOptions(){
+    return {choice:$("upscaleFactor").value,sharp:$("sharpen").checked,style:$("patternStyle").value};
+  }
+  async function renderRaster(canvas,image,tool,options,signal,session){
+    const w=image.naturalWidth,h=image.naturalHeight;
+    if(tool==="pattern"){
+      const [width,height]=fit(w,h,2.5e6,2000);
+      canvas.width=width*2;canvas.height=height*2;
+      pattern(canvas,image,options.style);
+      return {};
+    }
+    const {choice,sharp}=options;
+    const factor=choice==="stock"?Math.max(1,Math.sqrt(4e6/(w*h))):choice==="4k"?4096/Math.max(w,h):Number(choice);
+    const width=Math.ceil(w*factor),height=Math.ceil(h*factor);
+    [canvas.width,canvas.height]=fit(width,height,16e6,4096);
+    const capped=canvas.width!==width||canvas.height!==height;
+    const browserResize=!await resizeInWorker(image,canvas,sharp,signal,session);
+    return {capped,browserResize};
+  }
+  async function encodeRaster(canvas,format){
+    if(format!=="JPG")return rasterBlob(canvas,format);
+    const temp=document.createElement("canvas");
+    temp.width=canvas.width;temp.height=canvas.height;
+    const context=temp.getContext("2d");
+    context.fillStyle="#fff";context.fillRect(0,0,temp.width,temp.height);
+    context.drawImage(canvas,0,0);
+    try{return await rasterBlob(temp,format);}
+    finally{temp.width=temp.height=0;}
+  }
+  function outputName(name,tool,format){
+    return name+(tool==="pattern"?"-ubin":"-diperbesar")+"."+format.toLowerCase();
+  }
+  async function runBatch(){
+    if(batchController||queue.length<2||kind==="gradient"||recording)return;
+    clearPreview();
+    resetBatch();
+    const process=new AbortController();
+    batchController=process;
+    const {signal}=process, tool=kind, jobs=queue, options=rasterOptions(), format=$("utilityFormat").value;
+    const session={worker:null};
+    batchProgress.value=0;
+    refreshBatch();
+    state("Pratinjau tersedia setelah pemrosesan.");
+    let completed=0,failed=0;
+    for(const [index,job] of jobs.entries()){
+      if(signal.aborted)break;
+      batchStatus(`Memproses ${index+1} dari ${jobs.length} gambar…`);
+      const canvas=document.createElement("canvas");
+      let url;
+      try{
+        url=await prepareImageFile(job.file);
+        if(signal.aborted)break;
+        const image=await loadImage(url);
+        if(signal.aborted)break;
+        await renderRaster(canvas,image,tool,options,signal,session);
+        if(signal.aborted)break;
+        const blob=await encodeRaster(canvas,format);
+        if(signal.aborted)break;
+        job.blob=blob;
+        job.name=outputName(fileName(job.file.name),tool,format);
+        completed++;
+      }catch(error){
+        if(signal.aborted)break;
+        job.error=error.message;
+        failed++;
+      }finally{
+        if(url)URL.revokeObjectURL(url);
+        canvas.width=canvas.height=0;
+      }
+      batchSelect.options[index].text=queueLabel(job,index);
+      batchProgress.value=(index+1)/jobs.length;
+    }
+    session.worker?.terminate();
+    if(batchController!==process)return;
+    batchController=null;
+    const result=`${completed} dari ${jobs.length} gambar selesai${failed?`, ${failed} gagal`:""}.`;
+    batchStatus(signal.aborted?`Dibatalkan. ${result}`:result);
+    refreshBatch();
+    const first=jobs.findIndex(job=>job.blob);
+    if(first>=0){
+      batchSelect.value=String(first);
+      showSelection();
+    }else state(failed?"Tidak ada hasil. Pilih nama file untuk melihat penyebabnya.":"Belum ada hasil.");
+  }
+  async function downloadBatch(){
+    if(batchController||batchExport)return;
+    const jobs=queue.filter(job=>job.blob),tool=kind;
+    if(!jobs.length)return;
+    const ticket={};
+    batchExport=ticket;
+    refreshBatch();
+    function* files(){
+      for(const [index,job] of jobs.entries()){
+        if(batchExport!==ticket)throw new DOMException("Dibatalkan","AbortError");
+        yield {name:`${String(index+1).padStart(3,"0")}-${job.name}`,blob:job.blob};
+      }
+    }
+    try{
+      const zip=await zipFiles(files());
+      if(batchExport===ticket)saveFile(tool==="pattern"?"vektora-pola.zip":"vektora-upscale.zip",zip);
+    }catch(error){if(error.name!=="AbortError")notify(error.message);}
+    finally{
+      if(batchExport===ticket){batchExport=null;refreshBatch();}
+    }
+  }
+  async function showSelection(){
+    const job=queue[Number(batchSelect.value)];
+    if(!job?.blob){
+      clearPreview();
+      state(job?.error??"Jalankan antrean untuk melihat hasil gambar.");
+      return;
+    }
+    // Use the encoded result and decode just the selected pair for inspection.
+    clearPreview();
+    const ticket=serial,tool=kind;
+    state("Memuat pratinjau…");
+    let sourceUrl,resultUrl;
+    try{
+      sourceUrl=await prepareImageFile(job.file);
+      resultUrl=URL.createObjectURL(job.blob);
+      const [before,after]=await Promise.all([loadImage(sourceUrl),loadImage(resultUrl)]);
+      if(ticket!==serial)return;
+      output=after;
+      previewSource=tool==="upscale"?before:null;
+      paintPreview();
+      const size=previewSource?`${before.naturalWidth} × ${before.naturalHeight} → `:"";
+      state(`${size}${after.naturalWidth} × ${after.naturalHeight} px · ${job.file.name}`);
+      setReady(true);
+    }catch(error){
+      if(ticket===serial)state(error.message);
+    }finally{
+      if(sourceUrl)URL.revokeObjectURL(sourceUrl);
+      if(resultUrl)URL.revokeObjectURL(resultUrl);
+    }
+  }
   async function run(){
     const ticket=++serial;
     const current=kind;
@@ -200,7 +377,8 @@ export function setupUtilities({$,notify,saveFile,checkFile,loadImage,prepareIma
     controller=new AbortController();
     const signal=controller.signal;
     setReady(false);
-    if(output){output.width=output.height=0;output=null;}
+    if(output instanceof HTMLCanvasElement)output.width=output.height=0;
+    output=null;
     previewSource=null;
     state("Menyiapkan pratinjau…");
     await frame();
@@ -218,19 +396,7 @@ export function setupUtilities({$,notify,saveFile,checkFile,loadImage,prepareIma
         const image=await loadImage(source);
         if(signal.aborted)return;
         inputImage=image;
-        const w=image.naturalWidth,h=image.naturalHeight;
-        if(current==="pattern"){
-          const [width,height]=fit(w,h,2.5e6,2000);
-          canvas.width=width*2;canvas.height=height*2;
-          pattern(canvas,image,$("patternStyle").value);
-        }else{
-          const choice=$("upscaleFactor").value;
-          const factor=choice==="stock"?Math.max(1,Math.sqrt(4e6/(w*h))):choice==="4k"?4096/Math.max(w,h):Number(choice);
-          const width=Math.ceil(w*factor),height=Math.ceil(h*factor);
-          [canvas.width,canvas.height]=fit(width,height,16e6,4096);
-          capped=canvas.width!==width||canvas.height!==height;
-          browserResize=!await resizeInWorker(image,canvas,$("sharpen").checked,signal);
-        }
+        ({capped,browserResize}=await renderRaster(canvas,image,current,rasterOptions(),signal));
       }
       if(ticket!==serial)return;
       output=canvas;
@@ -245,11 +411,18 @@ export function setupUtilities({$,notify,saveFile,checkFile,loadImage,prepareIma
   }
   $("utilityChoose").onclick=()=>$("utilityFile").click();
   $("utilityFile").onchange=async event=>{
-    const file=event.target.files[0];
+    const selected=collectBatch(event.target.files);
     event.target.value="";
-    if(!file)return;
-    const error=checkFile(file);
-    if(error){notify(error);return;}
+    if(!selected.length)return;
+    queue=selected.length>1?selected.map(file=>({file})):[];
+    batchSelect.replaceChildren(...queue.map((job,index)=>new Option(queueLabel(job,index),index)));
+    resetBatch();
+    if(queue.length){
+      clearPreview();
+      state("Jalankan antrean untuk melihat hasil gambar.");
+      return;
+    }
+    const [file]=selected;
     const request=++serial;
     controller?.abort();
     setReady(false);
@@ -263,11 +436,19 @@ export function setupUtilities({$,notify,saveFile,checkFile,loadImage,prepareIma
     }catch(error){if(request===serial){state(error.message);notify(error.message);}}
   };
   $("utilitySample").onclick=()=>{
+    queue=[];
+    resetBatch();
     if(source!==sampleUrl)URL.revokeObjectURL(source);
     source=sampleUrl;base="botanika";
     run();
   };
-  $("utilityRun").onclick=run;
+  $("utilityRun").onclick=()=>queue.length>1&&kind!=="gradient"?runBatch():run();
+  $("utilityCancel").onclick=()=>batchController?.abort();
+  $("utilityBatchDownload").onclick=downloadBatch;
+  batchSelect.onchange=showSelection;
+  $("utilityFormat").onchange=()=>{
+    if(queue.length>1&&kind!=="gradient"){clearPreview();resetBatch();state("Jalankan antrean dengan format yang dipilih.");}
+  };
   view.onchange=$("upscaleDetail").onchange=paintPreview;
   split.oninput=()=>{
     if(previewFrame)return;
@@ -277,9 +458,17 @@ export function setupUtilities({$,notify,saveFile,checkFile,loadImage,prepareIma
     });
   };
   $("gradientPreset").onchange=()=>{setPalette();run();};
-  for(const id of ["gradientFirst","gradientSecond","gradientRatio","angle","grain","patternStyle","upscaleFactor","sharpen"])$(id).onchange=run;
+  for(const id of ["gradientFirst","gradientSecond","gradientRatio","angle","grain"])$(id).onchange=run;
+  for(const id of ["patternStyle","upscaleFactor","sharpen"])$(id).onchange=()=>{
+    if(queue.length<2){run();return;}
+    clearPreview();
+    resetBatch();
+    state("Jalankan antrean dengan pengaturan baru.");
+  };
   $("utilityDownload").onclick=async()=>{
     if(!ready||recording||!output)return;
+    const job=queue[Number(batchSelect.value)];
+    if(kind!=="gradient"&&job?.blob){saveFile(job.name,job.blob);return;}
     const exportCanvas=output;
     const format=$("utilityFormat").value;
     const name=kind==="gradient"?"vektora-gradien":base+(kind==="pattern"?"-ubin":"-diperbesar");
@@ -291,19 +480,27 @@ export function setupUtilities({$,notify,saveFile,checkFile,loadImage,prepareIma
         const video=await recordLoop(lastGradient,availableVideo,phase=>{if(ticket===serial)state(`Merekam video… ${Math.round(phase*100)}%`);});
         saveFile(name+(video.type.includes("mp4")?".mp4":".webm"),video);
         if(ticket===serial)state("Video loop 4 detik siap diunduh.");
-      }else if(format==="JPG"){
-        const temp=document.createElement("canvas");
-        temp.width=exportCanvas.width;temp.height=exportCanvas.height;
-        const context=temp.getContext("2d");
-        context.fillStyle="#fff";context.fillRect(0,0,temp.width,temp.height);
-        context.drawImage(exportCanvas,0,0);
-        try{saveFile(name+".jpg",await rasterBlob(temp,format));}
-        finally{temp.width=temp.height=0;}
-      }else saveFile(name+".png",await rasterBlob(exportCanvas,format));
+      }else saveFile(name+"."+format.toLowerCase(),await encodeRaster(exportCanvas,format));
     }catch(error){notify(error.message);}
     finally{recording=false;setReady(ready);}
   };
   return function open(studio){
+    if(studio==="vector"){
+      if(batchController){
+        batchController.abort();
+        batchController=null;
+        batchStatus("Antrean dihentikan saat berganti alat.");
+      }
+      batchExport=null;
+      clearPreview();
+      refreshBatch();
+      return;
+    }
+    const changed=studio!==kind;
+    if(changed&&batchController){
+      batchController.abort();
+      batchController=null;
+    }
     kind=studio;
     $("upscaleSplit").hidden=studio!=="upscale"||view.value!=="compare";
     const isGradient=studio==="gradient";
@@ -314,7 +511,16 @@ export function setupUtilities({$,notify,saveFile,checkFile,loadImage,prepareIma
     $("utilityChoose").hidden=$("utilitySample").hidden=isGradient;
     $("videoOption").hidden=!isGradient||!availableVideo;
     $("videoOption").disabled=$("videoOption").hidden;
-    $("utilityFormat").value="PNG";
-    run();
+    if(changed){
+      $("utilityFormat").value="PNG";
+      resetBatch();
+    }
+    if(studio==="gradient"||queue.length<2){
+      refreshBatch();
+      run();
+    }else if(!batchController){
+      refreshBatch();
+      showSelection();
+    }
   };
 }

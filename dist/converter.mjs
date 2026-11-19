@@ -1,4 +1,4 @@
-import {epsText,outputSize,pdfText,rasterSize,svgStart,svgText,traceSize,zipFiles} from "./formats.mjs?v=26";
+import {epsText,outputSize,pdfText,rasterSize,svgStart,svgText,traceSize,zipFiles} from "./formats.mjs?v=27";
 import {loadImage,prepareImageFile} from "./image-codec.mjs?v=14";
 import {detectIcons,detectInkPaper,gridIcons,removeBorderColor} from "./sheet.mjs?v=17";
 import {mountIcons} from "./icons.mjs?v=1";
@@ -7,6 +7,7 @@ const $=id=>document.getElementById(id);
 mountIcons();
 
 const allowed=/\.(jpe?g|png|webp|bmp|gif|avif)$/i;
+const batchLimit=200;
 const sampleUrl="assets/botanika.jpg";
 const standardFormat=new Intl.NumberFormat("id-ID");
 const count=value=>standardFormat.format(value);
@@ -38,6 +39,20 @@ function checkFile(file){
   if(file.size>20e6)return "Ukuran file melebihi 20 MB.";
   return "";
 }
+function collectBatch(files){
+  const accepted=[],messages=[];
+  let rejected=0,firstError="";
+  for(const file of files){
+    if(accepted.length===batchLimit)break;
+    const error=checkFile(file);
+    if(error){rejected++;firstError ||= `${file.name}: ${error}`;continue;}
+    accepted.push(file);
+  }
+  if(rejected)messages.push(`${count(rejected)} file dilewati. ${firstError}`);
+  if(files.length>accepted.length+rejected)messages.push(`Maksimal ${batchLimit} gambar per antrean.`);
+  if(messages.length)notify(messages.join(" "));
+  return accepted;
+}
 async function imageFrame(url){
   const image=await loadImage(url);
   if(typeof createImageBitmap!=="function")return image;
@@ -52,7 +67,7 @@ function rasterBlob(canvas,format){
 }
 
 let jobList=[],selected=0,studio="vector",mode="color",view="compare",zoom=1,serial=0;
-let worker=null,pending=null,processing=false,workerIdle;
+let worker=null,pending=null,processing=false,workerIdle,exportingBatch=false;
 let sheetPlan=null,sheetBusy=false,sheetRequest=0;
 let previewAsset=null,activeSVG=null,utilityLoader;
 const levels=[1,1.5,2,3,4,6,8];
@@ -90,7 +105,7 @@ function updateSettings(){
 function status(message){$("status").textContent=message;}
 function refreshButtons(){
   const item=current();
-  $("run").disabled=processing||sheetBusy||!jobList.length;
+  $("run").disabled=processing||exportingBatch||sheetBusy||!jobList.length;
   $("cancel").hidden=!processing;
   $("progressBox").hidden=!processing;
   $("run").lastChild.textContent=jobList.length>1?`Proses ${jobList.length} gambar`:"Buat vektor";
@@ -101,17 +116,19 @@ function refreshButtons(){
   for(const id of ["sliceMethod","sliceFormat","sliceBackground","columns","rows"])$(id).disabled=sheetBusy;
   $("sliceCancel").hidden=!sheetBusy;
   $("sliceProgress").hidden=!sheetBusy;
-  $("batchDownload").disabled=processing||!jobList.some(entry=>hasArtwork(entry.result));
+  $("batchDownload").disabled=processing||exportingBatch||!jobList.some(entry=>entry.saved);
+  $("queue").disabled=processing;
   $("zoomIn").disabled=zoom>=8||!item;
   $("zoomOut").disabled=zoom<=1||!item;
   $("zoomLevel").disabled=!item?.w;
 }
+function queueLabel(item,i){
+  const state=item.error?"gagal":item.saved||hasArtwork(item.result)?"selesai":"menunggu";
+  return `${i+1}. ${item.name} · ${state}`;
+}
 function updateQueue(){
   $("queueBox").hidden=jobList.length<2;
-  $("queue").replaceChildren(...jobList.map((item,i)=>{
-    const state=item.error?"gagal":item.result?"selesai":"menunggu";
-    return new Option(`${i+1}. ${item.name} · ${state}`,i);
-  }));
+  $("queue").replaceChildren(...jobList.map((item,i)=>new Option(queueLabel(item,i),i)));
   $("queue").value=String(selected);
 }
 function sizeArtwork(){
@@ -246,6 +263,8 @@ async function inspect(item){
   await item.source;
 }
 async function selectItem(index){
+  const previous=current();
+  if(previous?.saved)previous.result=null;
   selected=index;
   zoom=1;
   panX=panY=0;
@@ -254,7 +273,14 @@ async function selectItem(index){
   const item=current();
   renderPreview();
   if(!item)return;
-  try{await inspect(item);}catch(error){item.error=error.message;}
+  try{
+    await inspect(item);
+    if(item.saved&&!item.result){
+      const saved=item.saved;
+      const model=JSON.parse(await saved.text());
+      if(current()===item&&item.saved===saved)item.result=model;
+    }
+  }catch(error){item.error=error.message;}
   if(current()===item){updateQueue();renderPreview();}
 }
 function stopProcessing(){
@@ -280,15 +306,9 @@ async function sample(){
   if(jobList===items&&!processing)await run();
 }
 function addFiles(files){
-  const accepted=[];
-  let firstError="";
-  for(const file of Array.from(files).slice(0,30)){
-    const error=checkFile(file);
-    if(error){firstError ||= `${file.name}: ${error}`;continue;}
-    accepted.push({name:file.name==="gambar"?"gambar-tempel.png":file.name,file,local:true,size:file.size});
-  }
-  if(firstError)notify(firstError);
-  else if(files.length>30)notify("Maksimal 30 gambar per proses. Tiga puluh file pertama ditambahkan.");
+  const accepted=collectBatch(files).map(file=>({
+    name:file.name==="gambar"?"gambar-tempel.png":file.name,file,local:true,size:file.size
+  }));
   if(accepted.length)replaceItems(accepted);
 }
 function trace(pixels,w,h,options,progress){
@@ -354,10 +374,10 @@ async function convert(item,options,token,progress){
   return result;
 }
 async function run({reveal=false}={}){
-  if(processing||sheetBusy||!jobList.length)return;
+  if(processing||exportingBatch||sheetBusy||!jobList.length)return;
   processing=true;
   const token=++serial,options=settings();
-  for(const item of jobList){item.result=null;item.error=null;}
+  for(const item of jobList){item.result=null;item.saved=null;item.error=null;}
   updateQueue();
   renderPreview();
   const scoped=jobList;
@@ -368,20 +388,24 @@ async function run({reveal=false}={}){
     try {
       const result=await convert(item,options,token,value=>{$("progress").value=(i+value)/scoped.length;});
       if(token!==serial)return;
-      item.result=result;
+      if(!hasArtwork(result)&&scoped.length>1)throw Error("Hasil vektor kosong.");
+      if(scoped.length>1){
+        item.saved=new Blob([JSON.stringify(result,(key,value)=>key==="stops"?Array.from(value):value)]);
+      }
+      if(current()===item)item.result=result;
       item.resultSettings=options;
     }catch(error){
       if(token!==serial)return;
       item.error=error.message;
     }
-    updateQueue();
+    $("queue").options[i].text=queueLabel(item,i);
     if(current()===item)renderPreview();
   }
   if(token!==serial)return;
   processing=false;
   $("progress").value=1;
   renderPreview();
-  const finished=scoped.filter(item=>hasArtwork(item.result)).length;
+  const finished=scoped.filter(item=>item.saved||hasArtwork(item.result)).length;
   if(scoped.length>1)status(`${finished} dari ${scoped.length} gambar menghasilkan vektor.`);
   if(reveal && studio==="vector" && matchMedia("(max-width:739px)").matches){
     $("previewTitle").scrollIntoView({block:"start",behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth"});
@@ -453,19 +477,29 @@ async function downloadResult(){
   }catch(error){if(error.name!=="AbortError")notify(error.message);}
 }
 async function batchDownload(){
-  const items=jobList.filter(item=>hasArtwork(item.result));
+  if(processing||exportingBatch)return;
+  const items=jobList.filter(item=>item.saved);
   const queue=jobList,stock=$("stock").checked;
   if(!items.length)return;
-  const results=items.map(({result,name})=>({result,name}));
-  function* files(){
-    for(const [index,{result,name}] of results.entries()){
-      yield {name:`${String(index+1).padStart(2,"0")}-${fileName(name)}.svg`,text:svgText(result,{stock})};
+  exportingBatch=true;
+  $("batchDownload").textContent="Menyiapkan ZIP…";
+  refreshButtons();
+  async function* files(){
+    for(const [index,{saved,name}] of items.entries()){
+      if(jobList!==queue)throw new DOMException("Dibatalkan","AbortError");
+      const model=JSON.parse(await saved.text());
+      yield {name:`${String(index+1).padStart(3,"0")}-${fileName(name)}.svg`,text:svgText(model,{stock})};
     }
   }
   try{
     const zip=await zipFiles(files());
-    if(jobList===queue&&results.every(({result},i)=>items[i].result===result))saveFile("vektora-batch.zip",zip);
-  }catch(error){notify(error.message);}
+    if(jobList===queue)saveFile("vektora-batch.zip",zip);
+  }catch(error){if(error.name!=="AbortError")notify(error.message);}
+  finally{
+    exportingBatch=false;
+    $("batchDownload").textContent="Unduh semua SVG (.zip)";
+    refreshButtons();
+  }
 }
 function renderSheetBoxes(){
   const overlay=$("sliceOverlay"),show=Boolean(sheetPlan&&$("sliceShowBoxes").checked&&$("slice").open);
@@ -674,8 +708,8 @@ $("closeGuide").onclick=()=>$("guide").close();
 async function openUtility(target){
   if(!utilityLoader){
     $("utilityStatus").textContent="Memuat alat…";
-    utilityLoader=import("./utilities.mjs?v=18").then(({setupUtilities})=>
-      setupUtilities({$,notify,saveFile,checkFile,loadImage,prepareImageFile,rasterBlob,sampleUrl})
+    utilityLoader=import("./utilities.mjs?v=21").then(({setupUtilities})=>
+      setupUtilities({$,notify,saveFile,collectBatch,fileName,zipFiles,loadImage,prepareImageFile,rasterBlob,sampleUrl})
     ).catch(error=>{utilityLoader=null;throw error;});
   }
   try{
@@ -693,6 +727,7 @@ document.querySelectorAll("button[data-studio]").forEach(button=>button.onclick=
   $("vectorActions").hidden=studio!=="vector";
   $("utilityActions").hidden=studio==="vector";
   if(studio!=="vector")openUtility(studio);
+  else utilityLoader?.then(open=>{if(studio==="vector")open("vector");},()=>{});
   window.scrollTo(0,0);
 });
 updateSettings();

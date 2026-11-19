@@ -12,8 +12,8 @@
 <link rel="manifest" href="app.webmanifest?v=6">
 <meta name="apple-mobile-web-app-title" content="Vektora">
 <script type="module" src="pwa.mjs?v=1"></script>
-<link rel="stylesheet" href="converter.css?v=20">
-<script type="module" src="converter.mjs?v=29"></script>
+<link rel="stylesheet" href="converter.css?v=21">
+<script type="module" src="converter.mjs?v=32"></script>
 </head>
 <body>
 <header class="header"><div class="header-inner">
@@ -36,7 +36,7 @@
           <span class="upload-icon" data-icon="upload"></span>
           <strong>Pilih gambar</strong>
           <span>atau seret file ke sini</span>
-          <small>JPG, PNG, WebP, BMP, GIF, AVIF · maks. 20 MB</small>
+          <small>JPG, PNG, WebP, BMP, GIF, AVIF · 20 MB/file · maks. 200 gambar</small>
         </button>
         <input id="file" type="file" accept=".jpg,.jpeg,.png,.webp,.bmp,.gif,.avif,image/jpeg,image/png,image/webp,image/bmp,image/gif,image/avif" multiple hidden>
         <div id="fileInfo" class="file-info" hidden><span class="file-icon" data-icon="image"></span><div><strong id="fileName"></strong><small id="fileSize"></small></div></div>
@@ -126,9 +126,17 @@
   <section class="intro"><h1 id="utilityTitle"></h1><p id="utilityDescription"></p></section>
   <div class="workspace">
     <section class="card settings utility-controls"><div class="card-head"><h2>Pengaturan</h2><span class="head-icon" data-icon="sliders"></span></div>
-      <button id="utilityChoose" class="drop" data-icon="upload"><strong>Pilih gambar</strong><span>atau gunakan contoh</span></button>
-      <input id="utilityFile" type="file" accept=".jpg,.jpeg,.png,.webp,.bmp,.gif,.avif,image/jpeg,image/png,image/webp,image/bmp,image/gif,image/avif" hidden>
+      <button id="utilityChoose" class="drop" data-icon="upload"><strong>Pilih gambar</strong><span>Maks. 200 gambar · 20 MB per file</span></button>
+      <input id="utilityFile" type="file" multiple accept=".jpg,.jpeg,.png,.webp,.bmp,.gif,.avif,image/jpeg,image/png,image/webp,image/bmp,image/gif,image/avif" hidden>
       <button class="link-btn utility-sample" id="utilitySample">Gunakan contoh</button>
+      <div id="utilityQueueBox" class="queue-box" hidden>
+        <label for="utilityQueue">Gambar dalam antrean</label>
+        <select id="utilityQueue"></select>
+        <p id="utilityBatchStatus" class="muted" role="status"></p>
+        <progress id="utilityProgress" aria-label="Progres antrean gambar" max="1" hidden></progress>
+        <button type="button" id="utilityCancel" class="link-btn" hidden>Batalkan antrean</button>
+        <button type="button" id="utilityBatchDownload" class="button outline" data-icon="download" disabled>Unduh hasil (.zip)</button>
+      </div>
       <div id="upscaleFields">
         <label class="stack">Ukuran keluaran<select id="upscaleFactor"><option value="2">2× ukuran asli</option><option value="3">3× ukuran asli</option><option value="4">4× ukuran asli</option><option value="4k">Hingga 4K · maks. 16 MP</option><option value="stock">Minimal 4 MP</option></select></label>
         <label class="check"><input id="sharpen" type="checkbox" checked> Pulihkan ketajaman tepi</label>

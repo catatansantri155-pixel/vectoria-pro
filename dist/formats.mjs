@@ -187,25 +187,37 @@ const CRC_TABLE=Uint32Array.from({length:256},(_,value)=>{
   for(let bit=0;bit<8;bit++) value=value&1?0xedb88320^(value>>>1):value>>>1;
   return value;
 });
-function crc32(bytes){
+async function crc32(source){
   let sum=0xffffffff;
-  for(const byte of bytes)sum=CRC_TABLE[(sum^byte)&255]^(sum>>>8);
+  if(source instanceof Blob){
+    const reader=source.stream().getReader();
+    try{
+      while(true){
+        const {value,done}=await reader.read();
+        if(done)break;
+        for(const byte of value)sum=CRC_TABLE[(sum^byte)&255]^(sum>>>8);
+      }
+    }finally{reader.releaseLock();}
+  }else{
+    for(const byte of source)sum=CRC_TABLE[(sum^byte)&255]^(sum>>>8);
+  }
   return (sum^0xffffffff)>>>0;
 }
 export async function zipFiles(files){
   const contents=[],directory=[];
   let offset=0,directorySize=0,count=0;
-  for(const {name,text,bytes,blob} of files){
+  for await(const {name,text,bytes,blob} of files){
     const safeName=String(name).replace(/[\\/:*?"<>|\u0000-\u001f]/g,"-").replace(/^\.+/,"").trim()||"vektora";
     const title=encoder.encode(safeName);
-    const original=bytes??(blob?new Uint8Array(await blob.arrayBuffer()):encoder.encode(text));
-    const checksum=crc32(original);
+    const original=bytes??blob??encoder.encode(text);
+    const originalSize=original instanceof Blob?original.size:original.length;
+    const checksum=await crc32(original);
     let body=original,method=0;
-    if(original.length>=256&&safeName.endsWith(".svg")&&typeof CompressionStream==="function"){
+    if(originalSize>=256&&safeName.endsWith(".svg")&&typeof CompressionStream==="function"){
       try{
         const input=blob??new Blob([original]);
         const compressed=await new Response(input.stream().pipeThrough(new CompressionStream("deflate-raw"))).blob();
-        if(compressed.size<original.length){
+        if(compressed.size<originalSize){
           body=compressed;
           method=8;
         }
@@ -223,7 +235,7 @@ export async function zipFiles(files){
     h.setUint16(12,33,true);
     h.setUint32(14,checksum,true);
     h.setUint32(18,length,true);
-    h.setUint32(22,original.length,true);
+    h.setUint32(22,originalSize,true);
     h.setUint16(26,title.length,true);
     d.setUint32(0,0x02014b50,true);
     d.setUint16(4,20,true);
@@ -232,6 +244,9 @@ export async function zipFiles(files){
     contents.push(header,title,body);
     directory.push(entry,title);
     offset+=header.length+title.length+length;
+    if(offset+directorySize+entry.length+title.length+22>0xffffffff||count>=65535){
+      throw Error("ZIP terlalu besar. Bagi gambar menjadi beberapa antrean.");
+    }
     count++;
     directorySize+=entry.length+title.length;
   }
