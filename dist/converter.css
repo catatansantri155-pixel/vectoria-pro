@@ -197,14 +197,18 @@ dialog p{color:var(--muted);line-height:1.55;margin:10px 0}
   color:var(--ink);
 }
 body{
+  min-height:100dvh;
+  padding-bottom:calc(126px + env(safe-area-inset-bottom));
+}
+/* Latar dekoratif tinggal di lapisan tetapnya sendiri yang terkomposit GPU,
+   bukan background-attachment:fixed yang dicat ulang pada setiap bingkai gulir. */
+body::before{
+  content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;transform:translateZ(0);
   background:
     radial-gradient(ellipse at 4% 5%,#fff 0,transparent 42%),
     radial-gradient(ellipse at 98% 3%,#dfd8fc 0,transparent 43%),
     radial-gradient(ellipse at 8% 76%,#e1f0f8 0,transparent 43%),
     #f4f1fa;
-  background-attachment:fixed;
-  min-height:100dvh;
-  padding-bottom:calc(126px + env(safe-area-inset-bottom));
 }
 .header{background:var(--glass);backdrop-filter:blur(19px) saturate(145%);-webkit-backdrop-filter:blur(19px) saturate(145%)}
 .header-inner{display:flex;flex-wrap:nowrap;justify-content:space-between;gap:12px;padding-block:10px}
@@ -214,7 +218,7 @@ body{
 .intro{padding:25px 0 19px}
 .intro h1{font-weight:520;letter-spacing:-.077em;line-height:1.06}
 .intro p{font-weight:400}
-.card{background:var(--glass);border-color:rgba(255,255,255,.95);border-radius:20px;box-shadow:var(--surface-shadow);backdrop-filter:blur(17px) saturate(135%);-webkit-backdrop-filter:blur(17px) saturate(135%)}
+.card{background:var(--glass);border-color:rgba(255,255,255,.95);border-radius:20px;box-shadow:var(--surface-shadow);backdrop-filter:blur(17px) saturate(135%);-webkit-backdrop-filter:blur(17px) saturate(135%);content-visibility:auto;contain-intrinsic-size:auto 420px}
 h2{font-weight:630}
 .segment button,.link-btn,.button,.nav-link,.control,.stock-option{font-weight:560}
 .drop{background:rgba(245,240,255,.55);border-radius:14px}
@@ -273,4 +277,7 @@ h2{font-weight:630}
 
 @media(max-width:739px){
   .card{background:#fbfaff;backdrop-filter:none;-webkit-backdrop-filter:none}
+  /* Header lengket dan dok tetap tanpa blur latar di layar kecil: blur pada
+     elemen yang menempel di layar memaksa pengecatan ulang terus saat gulir. */
+  .header,.app-dock{background:rgba(250,248,255,.96);backdrop-filter:none;-webkit-backdrop-filter:none}
 }
