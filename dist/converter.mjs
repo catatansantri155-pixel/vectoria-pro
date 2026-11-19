@@ -265,7 +265,7 @@ function addFiles(files){
 }
 function trace(pixels,w,h,options,progress){
   if(!worker){
-    worker=new Worker(new URL("./trace-worker.mjs?v=18",import.meta.url),{type:"module"});
+    worker=new Worker(new URL("./trace-worker.mjs?v=19",import.meta.url),{type:"module"});
     worker.onmessage=event=>{
       const {progress,error,result}=event.data;
       if(!pending)return;

@@ -1,4 +1,4 @@
-import {isoRings} from "./ink-contours.mjs?v=18";
+import {isoRings,roundInkJoins} from "./ink-contours.mjs?v=19";
 import {fitRegionTones,hasShading,smoothTonePixels} from "./tones.mjs?v=14";
 import {sharedContours} from "./contours.mjs?v=18";
 import {detectInkPaper,luminance} from "./sheet.mjs?v=17";
@@ -369,8 +369,8 @@ function traceMonoLayer(pixels,w,h,settings,threshold,invert,color,noise,progres
       field[(y+1)*stride+x+1]=clean[index]===labels[index]?value:-Math.max(.5,Math.abs(value));
     }
   }
-  const tolerance=settings.smooth===false?0:[.36,.28,.20,.14,.08][settings.detail];
-  const rings=[];
+  const tolerance=settings.smooth===false?0:[.28,.22,.16,.12,.08][settings.detail];
+  const rings=[],paths=[];
   let objects=0,points=0;
   for(const contour of isoRings(field,w,h,progress)){
     const ring=tolerance?simplify(contour,tolerance):contour;
@@ -380,11 +380,13 @@ function traceMonoLayer(pixels,w,h,settings,threshold,invert,color,noise,progres
     }
     if(area===0)continue;
     if(area>0)objects++;
-    points+=ring.length;
+    const path=tolerance?roundInkJoins(ring,.18):null;
+    if(path)paths.push(path);
+    points+=path?.length??ring.length;
     if(points>360000)throw Error("Kontur terlalu rumit. Kurangi detail atau naikkan pembersihan bintik.");
     rings.push(ring);
   }
-  return {layers:rings.length?[{fill:hex(color),rings}]:[],points,contours:rings.length,objects,w,h,monochrome:true};
+  return {layers:rings.length?[{fill:hex(color),rings,...(tolerance?{paths}:{})}]:[],points,contours:rings.length,objects,w,h,monochrome:true};
 }
 
 function traceInk(pixels,w,h,settings,paper,includePaper,progress){

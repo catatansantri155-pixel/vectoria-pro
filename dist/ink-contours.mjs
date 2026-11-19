@@ -47,3 +47,31 @@ export function isoRings(field,w,h,progress){
   }
   return rings;
 }
+
+export function roundInkJoins(ring,limit){
+  const n=ring.length;
+  const joins=ring.map(([x,y],i)=>{
+    const previous=ring[(i+n-1)%n],next=ring[(i+1)%n];
+    const ax=previous[0]-x,ay=previous[1]-y,bx=next[0]-x,by=next[1]-y;
+    const a=Math.hypot(ax,ay),b=Math.hypot(bx,by);
+    if(a===0||b===0)return null;
+    const cosine=-(ax*bx+ay*by)/(a*b);
+    if(cosine<.62||cosine>.9999)return null;
+    // A quadratic through the corner deviates at most half the setback times sin(turn/2).
+    const halfTurn=Math.sqrt((1-cosine)/2);
+    const setback=Math.min(a*.5,b*.5,3,2*limit/halfTurn);
+    const start=[x+ax*setback/a,y+ay*setback/a];
+    const end=[x+bx*setback/b,y+by*setback/b];
+    return {start,end,controls:[
+      start[0]+(x-start[0])*2/3,start[1]+(y-start[1])*2/3,
+      end[0]+(x-end[0])*2/3,end[1]+(y-end[1])*2/3
+    ]};
+  });
+  const commands=[];
+  for(let i=0;i<n;i++){
+    const join=joins[i];
+    commands.push([i?"L":"M",join?.start??ring[i]]);
+    if(join)commands.push(["C",[...join.controls,...join.end]]);
+  }
+  return commands;
+}
