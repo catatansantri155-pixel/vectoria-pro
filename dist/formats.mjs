@@ -44,7 +44,9 @@ export function svgText(model,options={}){
     ? outputSize(Math.round(crop.w),Math.round(crop.h),options.stock)
     : outputSize(model.originalWidth??w,model.originalHeight??h,options.stock));
   const dim=options.preview ? "" : ` width="${width}" height="${height}"`;
-  const background=options.background==="white"?`<rect width="${crop.w}" height="${crop.h}" fill="#ffffff"/>`:"";
+  const backgroundFill=options.background==="white"?"#ffffff":
+    options.background==="transparent"||options.outlines?null:model.backgroundFill;
+  const background=backgroundFill?`<rect width="${crop.w}" height="${crop.h}" fill="${backgroundFill}"/>`:"";
   const gradients=[],shapes=[];
   for(const {fill,rings,paths:geometry,regions} of model.exact?[]:layers){
     const groups=new Map();
@@ -80,6 +82,10 @@ function intersects(ring,crop) {
 const rgb=fill=>[1,3,5].map(i=>round(parseInt(fill.slice(i,i+2),16)/255)).join(" ");
 function drawCommands(model,pdf){
   const cmd=[];
+  if(model.backgroundFill){
+    cmd.push(rgb(model.backgroundFill)+(pdf?" rg":" setrgbcolor"));
+    cmd.push(`0 0 ${model.w} ${model.h}`+(pdf?" re f":" rectfill"));
+  }
   if(model.exact){
     if(model.layers.some(layer=>layer.opacity<1))throw Error("Gunakan SVG atau PNG untuk mempertahankan transparansi parsial di Presisi piksel.");
     for(const {fill,boxes} of model.layers){

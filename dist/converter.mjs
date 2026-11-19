@@ -1,7 +1,7 @@
-import {epsText,outputSize,pdfText,rasterSize,svgText,traceSize,zipFiles} from "./formats.mjs?v=15";
+import {epsText,outputSize,pdfText,rasterSize,svgText,traceSize,zipFiles} from "./formats.mjs?v=17";
 import {setupUtilities} from "./utilities.mjs?v=14";
 import {loadImage,prepareImageFile} from "./image-codec.mjs?v=14";
-import {detectIcons,gridIcons,removeBorderColor} from "./sheet.mjs?v=15";
+import {detectIcons,detectInkPaper,gridIcons,removeBorderColor} from "./sheet.mjs?v=17";
 import {mountIcons} from "./icons.mjs";
 
 const $=id=>document.getElementById(id);
@@ -63,7 +63,7 @@ const label=id=>Number($(id).value);
 const settings=()=>({
   mode,colors:label("colors"),threshold:label("threshold"),detail:label("detail"),noise:label("noise"),
   removeWhite:$("removeWhite").checked,hd:$("traceHD").checked,smooth:$("smoothCurves").checked,
-  profile:$("traceProfile").value,monoAuto:$("monoAuto").checked,monoInvert:$("monoPolarity").value==="light"
+  profile:$("traceProfile").value,monoBackground:$("monoBackground").value,monoAuto:$("monoAuto").checked,monoInvert:$("monoPolarity").value==="light"
 });
 const exactMode=options=>options.mode==="color"&&options.profile==="exact";
 function sampleSize(w,h,options){
@@ -78,7 +78,7 @@ function updateSettings(){
   const exact=exactMode(settings());
   $("exactHelp").hidden=!exact;
   for(const id of ["detailControl","hdControl","smoothControl","advanced"])$(id).hidden=exact;
-  $("colorControls").hidden=mode!=="color";
+  $("colorControls").hidden=$("removeWhiteControl").hidden=mode!=="color";
   $("thresholdControl").hidden=$("monoAuto").checked;
   $("profileControl").hidden=mode!=="color";
   $("monoControls").hidden=mode!=="mono";
@@ -265,7 +265,7 @@ function addFiles(files){
 }
 function trace(pixels,w,h,options,progress){
   if(!worker){
-    worker=new Worker(new URL("./trace-worker.mjs?v=15",import.meta.url),{type:"module"});
+    worker=new Worker(new URL("./trace-worker.mjs?v=17",import.meta.url),{type:"module"});
     worker.onmessage=event=>{
       const {progress,error,result}=event.data;
       if(!pending)return;
@@ -293,13 +293,22 @@ async function convert(item,options,token,progress){
   let image=await imageFrame(item.url);
   if(token!==serial){image.close?.();throw new DOMException("Dibatalkan","AbortError");}
   const canvas=document.createElement("canvas");
-  canvas.width=width;canvas.height=height;
   const context=canvas.getContext("2d",{willReadFrequently:true});
-  context.imageSmoothingQuality="high";
-  context.drawImage(image,0,0,canvas.width,canvas.height);
-  image.close?.();
-  image=null;
-  const pixels=context.getImageData(0,0,canvas.width,canvas.height).data;
+  function sample(w,h){
+    canvas.width=w;canvas.height=h;
+    context.imageSmoothingQuality="high";
+    context.drawImage(image,0,0,w,h);
+    return context.getImageData(0,0,w,h).data;
+  }
+  let pixels;
+  try{
+    // Use native edges and color samples for ink on paper before upsampling can alter them.
+    if(options.mode==="color"&&options.profile==="auto"&&width>item.w&&height>item.h){
+      const native=sample(item.w,item.h);
+      if(detectInkPaper(native,item.w,item.h))pixels=native;
+    }
+    pixels??=sample(width,height);
+  }finally{image.close?.();image=null;}
   const result=await trace(pixels,canvas.width,canvas.height,options,progress);
   result.originalWidth=item.w;
   result.originalHeight=item.h;
@@ -420,10 +429,10 @@ async function scanSheet(){
     const context=sample.getContext("2d",{willReadFrequently:true});
     context.drawImage(image,0,0,sample.width,sample.height);
     const pixels=context.getImageData(0,0,sample.width,sample.height);
-    let boxes,background;
+    let boxes,background,inkPaper;
     if(method==="auto"){
       const found=detectIcons(pixels.data,sample.width,sample.height);
-      background=found.background;
+      ({background,inkPaper}=found);
       if(found.boxes.length<2)throw Error("Kurang dari dua ikon terpisah terdeteksi. Periksa jarak antarikon atau pilih kisi manual.");
       boxes=found.boxes.map(({x,y,w,h})=>({
         x:Math.floor(x*item.w/sample.width),y:Math.floor(y*item.h/sample.height),
@@ -435,10 +444,10 @@ async function scanSheet(){
       if(![rows,columns].every(value=>Number.isInteger(value)&&value>=1&&value<=20)||
         rows*columns<2||rows>item.h||columns>item.w)throw Error("Masukkan 1–20 baris dan kolom, dengan minimal 2 sel.");
       boxes=gridIcons(item.w,item.h,rows,columns);
-      try{background=detectIcons(pixels.data,sample.width,sample.height).background;}catch{}
+      try{({background,inkPaper}=detectIcons(pixels.data,sample.width,sample.height));}catch{}
     }
     if(request!==sheetRequest)return;
-    sheetPlan={item,boxes,background};
+    sheetPlan={item,boxes,background,inkPaper};
     renderSheetBoxes();
     setSheetMessage(`${count(boxes.length)} ${method==="auto"?"ikon terdeteksi":"potongan kisi siap"}.`);
   }catch(error){if(request===sheetRequest)setSheetMessage(error.message);}
@@ -459,9 +468,11 @@ async function pngFromIcon(model,background){
 
 async function sliceDownload(){
   if(!sheetPlan||sheetBusy||processing)return;
-  const {item,boxes,background}=sheetPlan,format=$("sliceFormat").value;
+  const {item,boxes,background,inkPaper}=sheetPlan,format=$("sliceFormat").value;
   const outputBackground=$("sliceBackground").value,method=$("sliceMethod").value;
-  const config={...settings(),removeWhite:false};
+  const isolatedPaper=outputBackground==="source"?null:inkPaper;
+  const config={...settings(),removeWhite:false,monoBackground:"transparent",
+    ...(mode==="mono"?{}:{isolatedPaper})};
   const stock=$("stock").checked,base=fileName(item.name);
   sheetBusy=true;
   const request=++sheetRequest;
@@ -481,7 +492,7 @@ async function sliceDownload(){
       context.imageSmoothingQuality="high";
       context.drawImage(image,box.x,box.y,box.w,box.h,0,0,canvas.width,canvas.height);
       const raw=context.getImageData(0,0,canvas.width,canvas.height).data;
-      if(outputBackground!=="source")removeBorderColor(raw,canvas.width,canvas.height,background,exactMode(config)?0:24);
+      if(outputBackground!=="source"&&!isolatedPaper)removeBorderColor(raw,canvas.width,canvas.height,background,exactMode(config)?0:24);
       const model=await trace(raw,canvas.width,canvas.height,config,()=>{});
       if(request!==sheetRequest)return;
       if(!model.layers.length){
@@ -577,7 +588,7 @@ function settingsChanged(){
   updateSettings();
   if(current()?.result&&!processing)status("Pengaturan berubah. Ketuk Buat vektor untuk memperbarui hasil.");
 }
-for(const id of ["detail","colors","threshold","noise","removeWhite","traceHD","smoothCurves","traceProfile","monoAuto","monoPolarity"])$(id).oninput=settingsChanged;
+for(const id of ["detail","colors","threshold","noise","removeWhite","traceHD","smoothCurves","traceProfile","monoAuto","monoPolarity","monoBackground"])$(id).oninput=settingsChanged;
 document.querySelectorAll("[data-mode]").forEach(button=>button.onclick=()=>{mode=button.dataset.mode;settingsChanged();});
 document.querySelectorAll("button[data-view]").forEach(button=>button.onclick=()=>switchView(button.dataset.view));
 $("help").onclick=()=>$("guide").showModal();

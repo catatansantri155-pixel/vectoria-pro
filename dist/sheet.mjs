@@ -1,3 +1,39 @@
+export const luminance=(pixels,i)=>Math.round(pixels[i]*.213+pixels[i+1]*.715+pixels[i+2]*.072);
+const rgbLuminance=rgb=>luminance(rgb,0);
+
+export function detectInkPaper(pixels,w,h){
+  const corners=[0,w-1,w*(h-1),w*h-1];
+  if(corners.some(i=>pixels[i*4+3]!==255||luminance(pixels,i*4)<225))return null;
+  const dark=new Map(),light=new Map(),grid=new Map();
+  let total=0,neutral=0,paper=0,ink=0;
+  for(let i=0;i<pixels.length;i+=76){
+    total++;
+    if(pixels[i+3]!==255)return null;
+    const r=pixels[i],g=pixels[i+1],b=pixels[i+2];
+    if(Math.max(r,g,b)-Math.min(r,g,b)<=16)neutral++;
+    const value=luminance(pixels,i);
+    const color=(r<<16)|(g<<8)|b;
+    if(value<=32){dark.set(color,(dark.get(color)??0)+1);ink++;}
+    if(value>=225){light.set(color,(light.get(color)??0)+1);paper++;}
+    if(value>=250)grid.set(color,(grid.get(color)??0)+1);
+  }
+  if(neutral<total*.99||paper<total*.55||ink<total*.012||ink+paper<total*.93)return null;
+  function dominant(samples){
+    let most=0,chosen=0;
+    for(const [color,count] of samples){
+      if(count>most){most=count;chosen=color;}
+    }
+    return [chosen>>16,(chosen>>8)&255,chosen&255];
+  }
+  const inkColor=dominant(dark),paperColor=dominant(light);
+  const accentColor=grid.size?dominant(grid):null;
+  const paperLuma=rgbLuminance(paperColor),accentLuma=accentColor?rgbLuminance(accentColor):0;
+  return {
+    inkColor,paperColor,inkThreshold:Math.round((rgbLuminance(inkColor)+paperLuma)/2),
+    accent:accentLuma-paperLuma>=6?{color:accentColor,threshold:Math.ceil((paperLuma+accentLuma)/2)}:null
+  };
+}
+
 function inferBackground(pixels,w,h){
   const bins=new Map();
   let transparent=0,total=0;
@@ -54,8 +90,9 @@ function bounds(mask,w,x0,y0,x1,y1){
 
 export function detectIcons(pixels,w,h){
   const background=inferBackground(pixels,w,h);
+  const inkPaper=detectInkPaper(pixels,w,h);
   const mask=new Uint8Array(w*h);
-  for(let i=0;i<mask.length;i++)mask[i]=!matches(pixels,i*4,background,23);
+  for(let i=0;i<mask.length;i++)mask[i]=inkPaper?luminance(pixels,i*4)<inkPaper.inkThreshold:!matches(pixels,i*4,background,23);
   // Ignore isolated dust without treating a thin continuous stroke as noise.
   for(let y=1;y<h-1;y++){
     for(let x=1;x<w-1;x++){
@@ -105,7 +142,7 @@ export function detectIcons(pixels,w,h){
     });
   }
   if(output.length>400)throw Error("Terlalu banyak potongan. Bagi lembar menjadi beberapa bagian.");
-  return {background,boxes:output};
+  return {background,boxes:output,inkPaper};
 }
 
 export function gridIcons(w,h,rows,columns){

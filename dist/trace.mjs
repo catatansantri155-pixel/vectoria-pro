@@ -1,5 +1,6 @@
 import {fitRegionTones,hasShading,smoothTonePixels} from "./tones.mjs?v=14";
-import {sharedContours} from "./contours.mjs?v=14";
+import {sharedContours} from "./contours.mjs?v=17";
+import {detectInkPaper,luminance} from "./sheet.mjs?v=17";
 
 const DIRECTIONS = [[1,0],[0,1],[-1,0],[0,-1]];
 const SEARCH_DIRECTIONS = [...DIRECTIONS,[-1,-1],[1,-1],[-1,1],[1,1]];
@@ -108,8 +109,6 @@ function dropWhite(pixels,w,h) {
     if(p<(h-1)*w)consider(p+w);
   }
 }
-const luminance=(pixels,i)=>Math.round(pixels[i]*.213+pixels[i+1]*.715+pixels[i+2]*.072);
-
 function monoThreshold(pixels){
   const histogram=new Uint32Array(256);
   let total=0,sum=0;
@@ -255,7 +254,7 @@ function simplify(points,tolerance) {
   const result=points.filter((_,i)=>keep[i]);
   return result.length>=3?result:points;
 }
-function traceEdges(labels,w,h,colors,detail,smooth,hd,progress,tonal) {
+function traceEdges(labels,w,h,colors,detail,smooth,hd,progress,tonal,preserve=false) {
   const edges=new Uint8Array(labels.length);
   for(let i=0;i<labels.length;i++){
     const label=labels[i],x=i%w;
@@ -266,7 +265,7 @@ function traceEdges(labels,w,h,colors,detail,smooth,hd,progress,tonal) {
     if(!x||labels[i-1]!==label)edges[i]|=8;
   }
   const layers=colors.map(color=>({fill:hex(color),rings:[],...(smooth?{paths:[]}:{}),...(tonal?{regions:[]}:{})}));
-  const fit=smooth?sharedContours(w,detail,hd,Boolean(tonal)):null;
+  const fit=smooth?sharedContours(w,detail,hd,Boolean(tonal),preserve):null;
   const labelAt=(x,y)=>x<0||x>=w||y<0||y>=h?0:labels[y*w+x];
   function junction(x,y){
     const a=labelAt(x-1,y-1),b=labelAt(x,y-1);
@@ -356,11 +355,43 @@ function traceExact(pixels,w,h,progress){
   return {w,h,exact:true,layers:[...layers.values()],objects,points:objects*4};
 }
 
+function traceInk(pixels,w,h,settings,paper,includePaper,progress){
+  const smooth=settings.smooth!==false;
+  const preserve=(labels,color,noise,update)=>traceEdges(
+    removeSpecks(labels,w,h,noise,1),w,h,[color],settings.detail,smooth,settings.hd,update,null,true
+  );
+  const labels=classifyMono(pixels,{threshold:paper.inkThreshold});
+  const model=preserve(labels,paper.inkColor,settings.noise,progress);
+  model.monochrome=true;
+  if(!includePaper)return model;
+  model.backgroundFill=hex(paper.paperColor);
+  if(paper.accent){
+    const {color,threshold}=paper.accent;
+    const highlights=classifyMono(pixels,{threshold,monoInvert:true});
+    const accent=preserve(highlights,color,Math.max(3,settings.noise),()=>{});
+    model.layers.unshift(...accent.layers);
+    model.objects+=accent.objects;
+    model.points+=accent.points;
+    model.contours+=accent.contours;
+  }
+  return model;
+}
+
 export function vectorize(pixels,w,h,settings,progress=()=>{}) {
-  if(settings.mode==="color"&&settings.profile==="exact")return traceExact(pixels,w,h,progress);
-  if(settings.removeWhite) dropWhite(pixels,w,h);
-  progress(.17);
   const monochrome=settings.mode==="mono";
+  const isolatedPaper=settings.isolatedPaper;
+  if(!monochrome&&settings.profile==="exact"){
+    if(isolatedPaper){
+      for(let i=0;i<pixels.length;i+=4){
+        if(luminance(pixels,i)>=isolatedPaper.inkThreshold)pixels[i+3]=0;
+      }
+    }
+    return traceExact(pixels,w,h,progress);
+  }
+  const paper=isolatedPaper??(!monochrome&&settings.profile==="auto"?detectInkPaper(pixels,w,h):null);
+  if(!monochrome&&paper)return traceInk(pixels,w,h,settings,paper,!settings.removeWhite&&!isolatedPaper,progress);
+  if(settings.removeWhite&&!monochrome)dropWhite(pixels,w,h);
+  progress(.17);
   const smooth=settings.smooth!==false;
   const useTones=!monochrome&&(settings.profile==="gradient"||(settings.profile==="auto"&&hasShading(pixels,w,h)));
   const sampled=useTones?smoothTonePixels(pixels,w,h):pixels;
@@ -372,5 +403,6 @@ export function vectorize(pixels,w,h,settings,progress=()=>{}) {
   progress(.54);
   const shapes=removeSpecks(cleaned,w,h,useTones?Math.max(3,settings.noise):settings.noise,colors.length);
   const tones=useTones?fitRegionTones(shapes,pixels,w,h):null;
-  return {...traceEdges(shapes,w,h,colors,settings.detail,smooth,settings.hd,progress,tones),monochrome};
+  const model=traceEdges(shapes,w,h,colors,settings.detail,smooth,settings.hd,progress,tones,monochrome);
+  return {...model,monochrome,...(monochrome&&settings.monoBackground==="white"?{backgroundFill:"#ffffff"}:{})};
 }

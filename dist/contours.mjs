@@ -26,10 +26,11 @@ function simplify(points, anchors, tolerance){
   return [...kept].sort((a,b)=>a-b);
 }
 
-function fitChain(raw, detail, hd, closed, tonal){
+function fitChain(raw, detail, hd, closed, tonal, preserve){
   const last=raw.length-1;
   if(last<4)return raw.slice(1).map(end=>({end}));
-  const radius=Math.max(1,Math.min(tonal?(hd?10:7):(hd?7:5),Math.floor(last/14)));
+  const maxRadius=preserve?3:hd?(tonal?10:7):(tonal?7:5);
+  const radius=Math.max(1,Math.min(maxRadius,Math.floor(last/14)));
   const span=radius*2;
   const at=i=>raw[closed?(i+last)%last:Math.max(0,Math.min(last,i))];
   const turns=[];
@@ -65,7 +66,8 @@ function fitChain(raw, detail, hd, closed, tonal){
     return [x/weight,y/weight];
   });
   const anchors=[...new Set([0,last,...hard,...(closed?[Math.floor(last/2)]:[])])].sort((a,b)=>a-b);
-  const indexes=simplify(points,anchors,[1.40,1.10,.82,.63,.50][detail]);
+  const tolerance=[1.40,1.10,.82,.63,.50][detail];
+  const indexes=simplify(points,anchors,preserve?tolerance*.70:tolerance);
   const sample=Math.max(2,radius);
   const pt=i=>points[closed?(i+last)%last:Math.min(last,Math.max(0,i))];
   function tangent(i, other, incoming){
@@ -82,10 +84,13 @@ function fitChain(raw, detail, hd, closed, tonal){
     if(length<1.1||startAlignment<.42||endAlignment<.42||(startAlignment>.9995&&endAlignment>.9995)){
       segments.push({end});continue;
     }
-    const handle=length/3;
+    // Cap the perpendicular displacement of handles so long straight runs stay straight.
+    const maxDeviation=preserve?.45:1.3;
+    const handleStart=Math.min(length/3,maxDeviation/Math.sqrt(Math.max(0,1-startAlignment**2)));
+    const handleEnd=Math.min(length/3,maxDeviation/Math.sqrt(Math.max(0,1-endAlignment**2)));
     segments.push({end,controls:[
-      start[0]+first[0]*handle,start[1]+first[1]*handle,
-      end[0]-second[0]*handle,end[1]-second[1]*handle
+      start[0]+first[0]*handleStart,start[1]+first[1]*handleStart,
+      end[0]-second[0]*handleEnd,end[1]-second[1]*handleEnd
     ]});
   }
   return segments;
@@ -103,7 +108,7 @@ function reversed(geometry){
   return result;
 }
 
-export function sharedContours(width,detail,hd,tonal=false){
+export function sharedContours(width,detail,hd,tonal=false,preserve=false){
   const cache=new Map();
   const key=([x,y])=>y*(width+1)+x;
   function chain(points,closed){
@@ -122,7 +127,7 @@ export function sharedContours(width,detail,hd,tonal=false){
     let geometry=cache.get(label);
     if(!geometry){
       let previous=points[0];
-      geometry=fitChain(points,detail,hd,closed,tonal).map(segment=>{
+      geometry=fitChain(points,detail,hd,closed,tonal,preserve).map(segment=>{
         const result={...segment,start:previous};previous=segment.end;
         return result;
       });

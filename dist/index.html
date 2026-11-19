@@ -10,7 +10,7 @@
 <link rel="icon" href="assets/mark.svg?v=5" type="image/svg+xml">
 <link rel="manifest" href="app.webmanifest?v=5">
 <link rel="stylesheet" href="converter.css?v=15">
-<script type="module" src="converter.mjs?v=15"></script>
+<script type="module" src="converter.mjs?v=17"></script>
 </head>
 <body>
 <header class="header"><div class="header-inner">
@@ -46,13 +46,14 @@
         <label id="smoothControl" class="quality-option"><input id="smoothCurves" type="checkbox" checked><span><strong>Kurva halus</strong><small>Haluskan tepi dan rapatkan batas antarwarna.</small></span></label>
         <div id="monoControls" class="stack" hidden>
           <label class="stack">Bagian yang dijadikan hitam<select id="monoPolarity"><option value="dark">Bagian gelap</option><option value="light">Bagian terang</option></select></label>
+          <label class="stack">Latar monokrom<select id="monoBackground"><option value="white">Putih</option><option value="transparent">Transparan</option></select></label>
           <label class="check"><input id="monoAuto" type="checkbox" checked> Ambang otomatis</label>
           <div id="thresholdControl" class="control" hidden><label for="threshold">Ambang monokrom</label><output id="thresholdOut" for="threshold">155</output><input id="threshold" type="range" min="1" max="255" value="155"></div>
         </div>
         <details id="advanced"><summary>Pengaturan lanjutan <span data-icon="chevron"></span></summary>
           <div id="colorControls" class="control"><label for="colors">Palet dasar</label><output id="colorsOut" for="colors">12</output><input id="colors" type="range" min="2" max="32" value="12"></div>
           <div class="control"><label for="noise">Bersihkan bintik</label><output id="noiseOut" for="noise">2</output><input id="noise" type="range" min="0" max="5" value="2"></div>
-          <label class="check"><input id="removeWhite" type="checkbox"><span>Hapus latar putih dari tepi</span></label>
+          <label id="removeWhiteControl" class="check"><input id="removeWhite" type="checkbox"><span>Hapus latar putih atau krem</span></label>
         </details>
 
         <button id="cancel" class="link-btn cancel" type="button" hidden>Batalkan proses</button>
