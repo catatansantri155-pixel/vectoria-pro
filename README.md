@@ -13,7 +13,7 @@ Konverter JPG, PNG, WebP, BMP, GIF, dan AVIF dengan pemrosesan lokal. GIF dipros
 
 ## Hasil HD
 
-**Kurva halus** memakai kurva Bézier di sepanjang kontur dengan belokan landai dan mempertahankan sudut tajam. Matikan jika gambar memang membutuhkan tepi piksel. **Trace HD** menambah kerapatan sampel sebelum pelacakan. SVG, EPS, dan PDF menyimpan bentuk vektor. Untuk PNG/JPG, pilih **Full HD, QHD, atau 4K** di pengaturan ekspor. Nilai tersebut berlaku pada sisi terpanjang dan gambar tetap proporsional. PNG/JPG dirender langsung dari hasil vektor. Resolusi yang lebih besar membantu menghaluskan bentuk yang dikenali, sementara detail yang sudah hilang pada sumber tidak bisa dipulihkan.
+**Kurva halus** memasang kurva Bézier pada batas yang dipakai bersama oleh dua warna, dengan mempertahankan sudut penting. Matikan jika gambar memang membutuhkan tepi piksel. **Trace HD** menambah kerapatan sampel sebelum pelacakan. SVG, EPS, dan PDF menyimpan bentuk vektor. Untuk PNG/JPG, pilih **Full HD, QHD, atau 4K** di pengaturan ekspor. Nilai tersebut berlaku pada sisi terpanjang dan gambar tetap proporsional. PNG/JPG dirender langsung dari hasil vektor. Resolusi yang lebih besar membantu menghaluskan bentuk yang dikenali, sementara detail yang sudah hilang pada sumber tidak bisa dipulihkan.
 
 ## Cara kerja
 

@@ -1,20 +1,38 @@
+import {sharedContours} from "./contours.mjs?v=10";
+
 const DIRECTIONS = [[1,0],[0,1],[-1,0],[0,-1]];
+const SEARCH_DIRECTIONS = [...DIRECTIONS,[-1,-1],[1,-1],[-1,1],[1,1]];
 const CELL = [[0,0],[-1,0],[-1,-1],[0,-1]];
 const ORIGIN = [[0,0],[1,0],[1,1],[0,1]];
 const hex = rgb => "#"+rgb.map(value=>value.toString(16).padStart(2,"0")).join("");
 
 const colorDistance=(r,g,b,[pr,pg,pb])=>(pr-r)**2*.28+(pg-g)**2*.53+(pb-b)**2*.19;
 
-function paletteFor(pixels, wanted, detail) {
-  const histogram = new Map();
-  for(let i=0;i<pixels.length;i+=4) {
-    if(pixels[i+3]<128) continue;
-    const r=pixels[i],g=pixels[i+1],b=pixels[i+2];
-    const key=(r>>3)*1024+(g>>3)*32+(b>>3);
+function paletteFor(pixels,w,h,wanted,detail,smooth,hd) {
+  const all = new Map(),interior=new Map();
+  const radius=hd?4:3;
+  function add(histogram,key,r,g,b){
     const entry=histogram.get(key);
     if(entry){entry[0]+=r;entry[1]+=g;entry[2]+=b;entry[3]++;}
     else histogram.set(key,[r,g,b,1]);
   }
+  function stable(offset,r,g,b){
+    return pixels[offset+3]>=128&&
+      Math.max(Math.abs(pixels[offset]-r),Math.abs(pixels[offset+1]-g),Math.abs(pixels[offset+2]-b))<=11;
+  }
+  for(let i=0;i<pixels.length;i+=4) {
+    if(pixels[i+3]<128) continue;
+    const r=pixels[i],g=pixels[i+1],b=pixels[i+2];
+    const key=(r>>3)*1024+(g>>3)*32+(b>>3);
+    add(all,key,r,g,b);
+    if(!smooth)continue;
+    const x=(i/4)%w,y=Math.floor(i/(4*w));
+    if(x<radius||y<radius||x>=w-radius||y>=h-radius)continue;
+    if(stable(i-4*radius,r,g,b)&&stable(i+4*radius,r,g,b)&&
+      stable(i-4*w*radius,r,g,b)&&stable(i+4*w*radius,r,g,b))add(interior,key,r,g,b);
+  }
+  // Anti-aliased transition pixels should not become their own paint layers.
+  const histogram=interior.size>1?interior:all;
   function describe(entries){
     const low=[255,255,255],high=[0,0,0],sum=[0,0,0];
     let total=0;
@@ -111,6 +129,38 @@ function classify(pixels,colors,threshold) {
   }
   return labels;
 }
+function cleanTransitionColors(labels,pixels,w,h,colors,hd){
+  if(colors.length<3)return labels;
+  const radius=hd?2:1, search=hd?7:5;
+  const stable=new Uint8Array(labels.length),cleaned=labels.slice();
+  for(let y=radius;y<h-radius;y++){
+    for(let x=radius;x<w-radius;x++){
+      const i=y*w+x,label=labels[i];
+      if(label&&labels[i-radius]===label&&labels[i+radius]===label&&
+        labels[i-w*radius]===label&&labels[i+w*radius]===label)stable[i]=1;
+    }
+  }
+  for(let i=0;i<labels.length;i++){
+    const label=labels[i];
+    if(!label||stable[i])continue;
+    const x=i%w,y=Math.floor(i/w),j=i*4;
+    let best=Infinity,replacement=label,supported=false;
+    for(let step=1;step<=search&&!supported;step++){
+      for(const [vx,vy] of SEARCH_DIRECTIONS){
+        const dx=vx*step,dy=vy*step,xx=x+dx,yy=y+dy;
+        if(xx<0||xx>=w||yy<0||yy>=h)continue;
+        const neighbor=yy*w+xx;
+        if(!stable[neighbor])continue;
+        const color=labels[neighbor];
+        if(color===label){supported=true;break;}
+        const score=colorDistance(pixels[j],pixels[j+1],pixels[j+2],colors[color-1])+(dx*dx+dy*dy)*4;
+        if(score<best){best=score;replacement=color;}
+      }
+    }
+    if(!supported)cleaned[i]=replacement;
+  }
+  return cleaned;
+}
 function removeSpecks(labels,w,h,noise,colorCount) {
   const min=[1,3,8,17,36,76][noise];
   if(min===1)return labels;
@@ -177,10 +227,16 @@ function traceEdges(labels,w,h,colors,detail,smooth,hd,progress) {
     if(i>=labels.length-w||labels[i+w]!==label)edges[i]|=4;
     if(!x||labels[i-1]!==label)edges[i]|=8;
   }
-  const layers=colors.map(color=>({fill:hex(color),rings:[]}));
+  const layers=colors.map(color=>({fill:hex(color),rings:[],...(smooth?{paths:[]}:{})}));
+  const fit=smooth?sharedContours(w,detail,hd):null;
+  const labelAt=(x,y)=>x<0||x>=w||y<0||y>=h?0:labels[y*w+x];
+  function junction(x,y){
+    const a=labelAt(x-1,y-1),b=labelAt(x,y-1);
+    const c=labelAt(x,y),d=labelAt(x-1,y);
+    return (Number(a!==b)+Number(b!==c)+Number(c!==d)+Number(d!==a))>2;
+  }
   const detailTolerance=[1.65,1.15,.72,.50,.31][detail];
-  // Upsampled pixels make stair steps wider without adding real edge detail.
-  const curveTolerance=[3.1,2.7,2.3,1.95,1.65][detail]*(hd?1.5:1);
+  let sampledEdges=0;
   let pointsTotal=0,contours=0,objects=0;
   for(let i=0;i<edges.length;i++){
     if(i%Math.max(w,Math.floor(h/8)*w)===0)progress(.56+.40*i/edges.length);
@@ -189,6 +245,8 @@ function traceEdges(labels,w,h,colors,detail,smooth,hd,progress) {
       const label=labels[i];
       let index=i,direction=side,x=i%w+ORIGIN[side][0],y=Math.floor(i/w)+ORIGIN[side][1];
       const initialX=x,initialY=y,vertices=[[x,y]];
+      const samples=smooth?[[x,y]]:null,junctions=[];
+      if(smooth&&junction(x,y))junctions.push(0);
       let area=0,closed=false;
       while(index>=0){
         edges[index]&=~(1<<direction);
@@ -196,6 +254,11 @@ function traceEdges(labels,w,h,colors,detail,smooth,hd,progress) {
         area+=x*(y+dy)-y*(x+dx);
         x+=dx;y+=dy;
         if(x===initialX&&y===initialY){closed=true;break;}
+        if(smooth){
+          if(junction(x,y))junctions.push(samples.length);
+          samples.push([x,y]);
+          if(++sampledEdges>1800000)throw Error("Kontur terlalu rumit. Kurangi jumlah warna atau nonaktifkan Trace HD.");
+        }
         let next=-1;
         for(const turn of [1,0,3,2]){
           const d=(direction+turn)%4;
@@ -207,14 +270,13 @@ function traceEdges(labels,w,h,colors,detail,smooth,hd,progress) {
         index=next;
       }
       if(!closed||vertices.length<3||area===0)continue;
-      const tolerance=smooth
-        ? Math.max(.8,Math.min(curveTolerance,Math.sqrt(Math.abs(area)/2)/13))
-        : detailTolerance;
-      const ring=simplify(vertices,tolerance);
-      pointsTotal+=ring.length;
+      const ring=simplify(vertices,detailTolerance);
+      const geometry=smooth?fit(samples,junctions):null;
+      pointsTotal+=geometry?geometry.length:ring.length;
       if(pointsTotal>360000)throw Error("Gambar terlalu kompleks. Kurangi warna atau detail, atau naikkan pembersihan bintik.");
       if(area>0)objects++;
       layers[label-1].rings.push(ring);
+      if(geometry)layers[label-1].paths.push(geometry);
       contours++;
     }
   }
@@ -224,9 +286,10 @@ export function vectorize(pixels,w,h,settings,progress=()=>{}) {
   if(settings.removeWhite) dropWhite(pixels,w,h);
   progress(.17);
   const monochrome=settings.mode==="mono";
-  const colors=monochrome?[[26,32,49]]:paletteFor(pixels,settings.colors,settings.detail);
+  const colors=monochrome?[[26,32,49]]:paletteFor(pixels,w,h,settings.colors,settings.detail,settings.smooth!==false,settings.hd);
   progress(.35);
   const labels=classify(pixels,colors,monochrome?settings.threshold:null);
+  const cleaned=settings.smooth!==false&&!monochrome?cleanTransitionColors(labels,pixels,w,h,colors,settings.hd):labels;
   progress(.54);
-  return traceEdges(removeSpecks(labels,w,h,settings.noise,colors.length),w,h,colors,settings.detail,settings.smooth!==false,settings.hd,progress);
+  return traceEdges(removeSpecks(cleaned,w,h,settings.noise,colors.length),w,h,colors,settings.detail,settings.smooth!==false,settings.hd,progress);
 }
