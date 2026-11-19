@@ -177,3 +177,76 @@ dialog p{color:var(--muted);line-height:1.55;margin:10px 0}
   .view-mode .ui-icon{width:14px;height:14px}
   .zoom button,.icon{min-width:40px}
 }
+
+/* Shared glass surfaces and a bottom dock for the main workflow. */
+:root{
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  --ink:#211e31;--muted:#595469;--purple:#5a41ce;
+  --line:rgba(126,112,158,.20);--soft:rgba(219,208,255,.50);
+  --glass:rgba(255,255,255,.68);
+  --surface-shadow:0 1px 1px rgba(255,255,255,.95) inset,0 5px 18px rgba(53,38,92,.07);
+  background:#f3f0fa;
+  color:var(--ink);
+}
+body{
+  background:
+    radial-gradient(ellipse at 4% 5%,#fff 0,transparent 42%),
+    radial-gradient(ellipse at 98% 3%,#dfd8fc 0,transparent 43%),
+    radial-gradient(ellipse at 8% 76%,#e1f0f8 0,transparent 43%),
+    #f4f1fa;
+  background-attachment:fixed;
+  min-height:100dvh;
+  padding-bottom:calc(126px + env(safe-area-inset-bottom));
+}
+.header{background:var(--glass);backdrop-filter:blur(19px) saturate(145%);-webkit-backdrop-filter:blur(19px) saturate(145%)}
+.header-inner{display:flex;flex-wrap:nowrap;justify-content:space-between;gap:12px;padding-block:10px}
+.brand{font-weight:650;letter-spacing:-.045em}
+.brand small{font-weight:600}
+.top-help{width:44px;height:44px;border-radius:50%;border:1px solid rgba(255,255,255,.84);background:var(--glass);box-shadow:var(--surface-shadow)}
+.intro{padding:25px 0 19px}
+.intro h1{font-weight:520;letter-spacing:-.077em;line-height:1.06}
+.intro p{font-weight:400}
+.card{background:var(--glass);border-color:rgba(255,255,255,.95);border-radius:20px;box-shadow:var(--surface-shadow);backdrop-filter:blur(17px) saturate(135%);-webkit-backdrop-filter:blur(17px) saturate(135%)}
+h2{font-weight:630}
+.segment button,.link-btn,.button,.nav-link,.control,.stock-option{font-weight:560}
+.drop{background:rgba(245,240,255,.55);border-radius:14px}
+.drop strong{font-weight:600}
+.canvas,.utility-preview{border-radius:13px}
+.preview-bottom .segment{background:rgba(236,228,248,.75)}
+.export-panel{background:rgba(242,236,250,.58)}
+.export-controls{align-items:flex-start;justify-content:flex-start;gap:9px 14px}
+.stock-option{margin-right:auto}
+.export-field{display:grid;align-items:center;gap:3px;font-size:11px;color:var(--muted);font-weight:550}
+.export-field select{min-height:38px}
+.export-field small{font-size:10px}
+.quality-option{display:flex;align-items:center;gap:8px;padding:9px 0 0;color:var(--ink);font-size:12px}
+.quality-option strong,.quality-option small{display:block}
+.quality-option strong{font-weight:620}
+.quality-option small{color:var(--muted);font-size:11px;margin-top:2px}
+.app-dock{
+  position:fixed;z-index:4;bottom:max(7px,env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);
+  width:min(490px,calc(100% - 18px));padding:6px;background:rgba(246,243,252,.84);
+  border:1px solid rgba(255,255,255,.95);border-radius:25px;
+  box-shadow:0 1px 1px white inset,0 5px 24px rgba(46,35,79,.18);
+  backdrop-filter:blur(24px) saturate(165%);-webkit-backdrop-filter:blur(24px) saturate(165%);
+}
+.dock-actions{display:grid;grid-template-columns:44px minmax(0,1fr) minmax(0,1fr);gap:5px;padding:0 0 5px}
+.dock-actions.utility-dock{grid-template-columns:1fr 1fr}
+.dock-actions .button{min-height:44px;margin:0;border-radius:15px;padding:0 6px}
+.dock-actions .outline{background:#fff9}
+.dock-actions #download,.dock-actions #utilityDownload{background:#e8e0ff;color:#452aab}
+.dock-actions button:disabled{opacity:.48}
+.app-dock .main-nav{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));width:100%;padding:4px 0 0;gap:1px;border-top:1px solid var(--line)}
+.app-dock .nav-link{display:flex;flex-direction:column;min-height:45px;gap:2px;padding:3px 0;font-size:11px;line-height:1.1;border-radius:13px;background:transparent;text-decoration:none}
+.app-dock .nav-link .ui-icon{display:block;width:19px;height:19px}
+.app-dock .nav-link[aria-pressed=true]{background:rgba(215,202,252,.68)}
+.app-dock .nav-link:hover{background:rgba(225,216,251,.74)}
+#notice{bottom:calc(118px + env(safe-area-inset-bottom))}
+#previewTitle{scroll-margin-top:12px}
+@media(min-width:740px){
+  .intro{padding-top:33px}
+  .export-controls{justify-content:flex-end}
+}
+@media(prefers-reduced-transparency:reduce){
+  .header,.card,.app-dock{background:#faf8ff;backdrop-filter:none;-webkit-backdrop-filter:none}
+}

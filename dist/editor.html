@@ -7,8 +7,8 @@
 <meta name="description" content="Editor vektor sentuh dengan ekspor SVG dan pemeriksaan aset untuk Adobe Stock.">
 <title>Vektora Studio — Editor vektor</title>
 <link rel="icon" href="assets/mark.svg?v=5" type="image/svg+xml">
-<link rel="stylesheet" href="style.css?v=5">
-<script type="module" src="editor.mjs?v=5"></script>
+<link rel="stylesheet" href="style.css?v=7">
+<script type="module" src="editor.mjs?v=7"></script>
 </head>
 <body>
 <header class="topbar">
@@ -19,7 +19,6 @@
   </div>
   <div class="top-actions">
     <button id="help" class="icon-btn help" data-icon="help" aria-label="Panduan"></button>
-    <button id="export" class="primary" data-icon="download">Ekspor <span>SVG</span></button>
   </div>
 </header>
 <main class="layout">
@@ -43,6 +42,7 @@
     </div>
     <div class="workspace-foot">
       <span id="hint" class="hint"></span>
+    <button id="export" class="primary" data-icon="download">Ekspor <span>SVG</span></button>
       <div class="zoom" aria-label="Pembesaran"><button id="minus" class="icon-btn" data-icon="zoomOut" aria-label="Perkecil"></button><span id="zoomLabel">100%</span><button id="plus" class="icon-btn" data-icon="zoomIn" aria-label="Perbesar"></button></div>
     </div>
   </section>

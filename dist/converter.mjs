@@ -1,4 +1,4 @@
-import {epsText,outputSize,pdfText,svgText,zipFiles} from "./formats.mjs";
+import {epsText,outputSize,pdfText,rasterSize,svgText,traceSize,zipFiles} from "./formats.mjs?v=7";
 import {setupUtilities} from "./utilities.mjs";
 import {mountIcons} from "./icons.mjs";
 
@@ -62,7 +62,7 @@ let jobList=[],selected=0,studio="vector",mode="color",view="compare",zoom=1,ser
 let worker=null,pending=null,processing=false,previewUrl;
 const current=()=>jobList[selected];
 const label=id=>Number($(id).value);
-const settings=()=>({mode,colors:label("colors"),threshold:label("threshold"),detail:label("detail"),noise:label("noise"),removeWhite:$("removeWhite").checked});
+const settings=()=>({mode,colors:label("colors"),threshold:label("threshold"),detail:label("detail"),noise:label("noise"),removeWhite:$("removeWhite").checked,hd:$("traceHD").checked});
 const detailNames=["Sederhana","Ringan","Seimbang","Detail tinggi","Sangat detail"];
 function updateSettings(){
   for(const key of ["colors","threshold","noise"])$(key+"Out").textContent=$(key).value;
@@ -108,7 +108,18 @@ function sizeArtwork(){
 }
 function updateDimensions(){
   const item=current();
-  if(!item?.w){$("dimensions").textContent="16 MP · proporsi asli";return;}
+  const raster = ["PNG","JPG"].includes($("format").value);
+  $("stockSettings").hidden=raster;
+  $("rasterSettings").hidden=!raster;
+  if(!item?.w){
+    $("dimensions").textContent="16 MP · proporsi asli";
+    $("rasterDimensions").textContent="Sisi terpanjang";
+    return;
+  }
+  if(raster){
+    const [rw,rh]=rasterSize(item.w,item.h,$("rasterSize").value);
+    $("rasterDimensions").textContent=`${count(rw)} × ${count(rh)} px`;
+  }
   const [w,h]=outputSize(item.w,item.h,$("stock").checked);
   $("dimensions").textContent=`${count(w)} × ${count(h)} px · ${(w*h/1e6).toLocaleString("id-ID",{maximumFractionDigits:2})} MP`;
 }
@@ -225,11 +236,8 @@ async function convert(item,options,token,progress){
   await inspect(item);
   let image=await imageFrame(item.url);
   if(token!==serial){image.close?.();throw new DOMException("Dibatalkan","AbortError");}
-  const maxEdge=[450,700,1000,1350,1750][options.detail];
-  const scale=Math.min(1,maxEdge/Math.max(item.w,item.h));
   const canvas=document.createElement("canvas");
-  canvas.width=Math.max(1,Math.round(item.w*scale));
-  canvas.height=Math.max(1,Math.round(item.h*scale));
+  [canvas.width,canvas.height]=traceSize(item.w,item.h,options.detail,options.hd);
   const context=canvas.getContext("2d",{willReadFrequently:true});
   context.imageSmoothingQuality="high";
   context.drawImage(image,0,0,canvas.width,canvas.height);
@@ -293,8 +301,7 @@ async function downloadResult(){
     else if(format==="EPS")saveFile(base+".eps",epsText(model,stock,base),"application/postscript");
     else if(format==="PDF")saveFile(base+".pdf",pdfText(model,stock),"application/pdf");
     else {
-      const [w,h]=outputSize(model.originalWidth,model.originalHeight,stock);
-      if(w*h>24e6||Math.max(w,h)>8192)throw Error("Raster terlalu besar untuk diekspor di browser ini. Pilih SVG atau EPS.");
+      const [w,h]=rasterSize(model.originalWidth,model.originalHeight,$("rasterSize").value);
       const canvas=document.createElement("canvas");
       canvas.width=w;canvas.height=h;
       const context=canvas.getContext("2d");
@@ -302,6 +309,7 @@ async function downloadResult(){
       const url=URL.createObjectURL(new Blob([svgText(model)],{type:"image/svg+xml"}));
       try{
         const image=await loadImage(url);
+        context.imageSmoothingQuality="high";
         context.drawImage(image,0,0,w,h);
         saveFile(base+"."+format.toLowerCase(),await rasterBlob(canvas,format));
       }finally{URL.revokeObjectURL(url);}
@@ -334,7 +342,7 @@ function sliceDownload(){
   saveFile(base+"-potongan.zip",zipFiles(files));
 }
 
-$("drop").onclick=()=>$("file").click();
+$("drop").onclick=$("dockPick").onclick=()=>$("file").click();
 $("file").onchange=event=>{addFiles(event.target.files);event.target.value="";};
 for(const event of ["dragenter","dragover","dragleave","drop"]){
   $("drop").addEventListener(event,input=>{
@@ -355,6 +363,7 @@ $("run").onclick=()=>run({reveal:true});
 $("cancel").onclick=()=>{stopProcessing();renderPreview();status("Proses dibatalkan.");};
 $("download").onclick=downloadResult;
 $("sliceDownload").onclick=sliceDownload;
+$("format").onchange=$("rasterSize").onchange=updateDimensions;
 $("stock").onchange=()=>{
   updateDimensions();
   if(current()?.result)$("svgSize").textContent=sizeText(new Blob([svgText(current().result,{stock:$("stock").checked})]).size);
@@ -368,7 +377,7 @@ function settingsChanged(){
   updateSettings();
   if(current()?.result&&!processing)status("Pengaturan berubah. Ketuk Buat vektor untuk memperbarui hasil.");
 }
-for(const id of ["detail","colors","threshold","noise","removeWhite"])$(id).oninput=settingsChanged;
+for(const id of ["detail","colors","threshold","noise","removeWhite","traceHD"])$(id).oninput=settingsChanged;
 document.querySelectorAll("[data-mode]").forEach(button=>button.onclick=()=>{mode=button.dataset.mode;settingsChanged();});
 document.querySelectorAll("button[data-view]").forEach(button=>button.onclick=()=>switchView(button.dataset.view));
 $("help").onclick=()=>$("guide").showModal();
@@ -379,7 +388,10 @@ document.querySelectorAll("button[data-studio]").forEach(button=>button.onclick=
   document.querySelectorAll("button[data-studio]").forEach(el=>el.setAttribute("aria-pressed",el===button));
   $("vector").hidden=studio!=="vector";
   $("utility").hidden=studio==="vector";
+  $("vectorActions").hidden=studio!=="vector";
+  $("utilityActions").hidden=studio==="vector";
   if(studio!=="vector")openUtility(studio);
+  window.scrollTo(0,0);
 });
 updateSettings();
 sample();

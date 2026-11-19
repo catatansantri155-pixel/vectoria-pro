@@ -5,6 +5,18 @@ export function outputSize(w,h,stock){
   const scale=Math.sqrt(16e6/(w*h));
   return [Math.max(1,Math.ceil(w*scale)),Math.max(1,Math.ceil(h*scale))];
 }
+export function rasterSize(w,h,preset){
+  const longest = Math.max(w,h);
+  const requested = preset==="native" ? longest : Number(preset);
+  const edge = Math.min(4096,requested);
+  const scale = edge/longest;
+  return [Math.max(1,Math.round(w*scale)),Math.max(1,Math.round(h*scale))];
+}
+export function traceSize(w,h,detail,hd){
+  const edgeLimit = hd ? [700,1050,1600,2000,2400][detail] : [450,700,1000,1350,1750][detail];
+  const scale = Math.min(hd?2:1,edgeLimit/Math.max(w,h),Math.sqrt(4.5e6/(w*h)));
+  return [Math.max(1,Math.floor(w*scale)),Math.max(1,Math.floor(h*scale))];
+}
 const sequence=ring=>"M"+ring.map(([x,y])=>x+" "+y).join("L")+"Z";
 export function svgText(model,options={}){
   const {w,h,layers}=model;

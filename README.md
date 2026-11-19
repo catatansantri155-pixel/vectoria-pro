@@ -11,10 +11,14 @@ Konverter JPG, PNG, WebP, BMP, GIF, dan AVIF dengan pemrosesan lokal. GIF dipros
 - **Gradien** membuat gradien bertekstur opsional dengan empat palet, rasio, dan arah yang dapat diedit. Ekspor loop empat detik tersedia jika browser mendukung MediaRecorder dan Canvas CaptureStream.
 - **Editor gambar** di `editor.html` tetap menggunakan penyimpanan proyek browser dari versi sebelumnya.
 
+## Hasil HD
+
+Aktifkan **Trace HD** saat ingin mencoba kontur yang lebih halus. SVG, EPS, dan PDF menyimpan bentuk vektor. Untuk PNG/JPG, pilih **Full HD, QHD, atau 4K** di pengaturan ekspor. Nilai tersebut berlaku pada sisi terpanjang dan gambar tetap proporsional. PNG/JPG dirender langsung dari hasil vektor. Resolusi yang lebih besar membantu menghaluskan bentuk yang dikenali, sementara detail yang sudah hilang pada sumber tidak bisa dipulihkan.
+
 ## Cara kerja
 
 1. `converter.mjs` mendekode gambar, mengambil piksel dan mengatur antrean serta perbandingan.
-2. `trace-worker.mjs` menjalankan kuantisasi warna, pembersihan bintik, pelacakan kontur dan simplifikasi titik melalui `trace.mjs`. Detail tinggi meningkatkan resolusi tracing sampai 1.750 px di sisi terpanjang. Foto, gradien halus, dan tekstur berubah menjadi bidang warna. Transparansi diproses sebagai masker biner. Fokus hasil adalah ikon, logo, dan ilustrasi.
+2. `trace-worker.mjs` menjalankan kuantisasi warna, pembersihan bintik, pelacakan kontur dan simplifikasi titik melalui `trace.mjs`. Trace HD menggunakan sampel hingga 2× lebih rapat sebelum tracing, dengan batas sisi terpanjang 2.400 px dan luas 4,5 MP. Foto, gradien halus, dan tekstur berubah menjadi bidang warna. Transparansi diproses sebagai masker biner. Fokus hasil adalah ikon, logo, dan ilustrasi.
 3. `formats.mjs` menulis path SVG, PostScript EPS, PDF dan ZIP lokal. Preset Adobe Stock menyesuaikan ukuran artboard sekitar 16 MP dengan mempertahankan proporsi. Ukuran artboard berbeda dari resolusi yang digunakan untuk tracing.
 4. `utilities.mjs` berisi pengolahan raster dan perekaman gradien. `sw.js` menyimpan aset aplikasi untuk akses offline setelah pemasangan berhasil di browser. Gambar sumber, antrean, dan hasil konversi tetap dalam memori selama halaman aktif.
 
