@@ -1,7 +1,7 @@
-import {epsText,outputSize,pdfText,rasterSize,svgText,traceSize,zipFiles} from "./formats.mjs?v=14";
+import {epsText,outputSize,pdfText,rasterSize,svgText,traceSize,zipFiles} from "./formats.mjs?v=15";
 import {setupUtilities} from "./utilities.mjs?v=14";
 import {loadImage,prepareImageFile} from "./image-codec.mjs?v=14";
-import {detectIcons,gridIcons,removeBorderColor} from "./sheet.mjs?v=14";
+import {detectIcons,gridIcons,removeBorderColor} from "./sheet.mjs?v=15";
 import {mountIcons} from "./icons.mjs";
 
 const $=id=>document.getElementById(id);
@@ -55,16 +55,31 @@ function rasterBlob(canvas,format){
 let jobList=[],selected=0,studio="vector",mode="color",view="compare",zoom=1,serial=0;
 let worker=null,pending=null,processing=false;
 let sheetPlan=null,sheetBusy=false,sheetRequest=0;
+let previewAsset=null;
 const levels=[1,1.5,2,3,4,6,8];
 let panX=0,panY=0,pan=null;
 const current=()=>jobList[selected];
 const label=id=>Number($(id).value);
-const settings=()=>({mode,colors:label("colors"),threshold:label("threshold"),detail:label("detail"),noise:label("noise"),removeWhite:$("removeWhite").checked,hd:$("traceHD").checked,smooth:$("smoothCurves").checked,profile:$("traceProfile").value});
+const settings=()=>({
+  mode,colors:label("colors"),threshold:label("threshold"),detail:label("detail"),noise:label("noise"),
+  removeWhite:$("removeWhite").checked,hd:$("traceHD").checked,smooth:$("smoothCurves").checked,
+  profile:$("traceProfile").value,monoAuto:$("monoAuto").checked,monoInvert:$("monoPolarity").value==="light"
+});
+const exactMode=options=>options.mode==="color"&&options.profile==="exact";
+function sampleSize(w,h,options){
+  if(!exactMode(options))return traceSize(w,h,options.detail,options.hd);
+  if(w*h>4.5e6||Math.max(w,h)>8192)throw Error("Presisi piksel mendukung gambar hingga 4,5 MP dan 8.192 px per sisi. Bagi gambar atau pilih Otomatis.");
+  return [w,h];
+}
 const detailNames=["Sederhana","Ringan","Seimbang","Detail tinggi","Sangat detail"];
 function updateSettings(){
   for(const key of ["colors","threshold","noise"])$(key+"Out").textContent=$(key).value;
   $("detailOut").textContent=detailNames[label("detail")];
+  const exact=exactMode(settings());
+  $("exactHelp").hidden=!exact;
+  for(const id of ["detailControl","hdControl","smoothControl","advanced"])$(id).hidden=exact;
   $("colorControls").hidden=mode!=="color";
+  $("thresholdControl").hidden=$("monoAuto").checked;
   $("profileControl").hidden=mode!=="color";
   $("monoControls").hidden=mode!=="mono";
   document.querySelectorAll("[data-mode]").forEach(el=>el.setAttribute("aria-pressed",el.dataset.mode===mode));
@@ -80,6 +95,7 @@ function refreshButtons(){
   $("slice").hidden=!item?.w;
   $("sliceScan").disabled=processing||sheetBusy;
   $("sliceDownload").disabled=processing||sheetBusy||!sheetPlan?.boxes.length;
+  for(const id of ["sliceMethod","sliceFormat","sliceBackground","columns","rows"])$(id).disabled=sheetBusy;
   $("sliceCancel").hidden=!sheetBusy;
   $("sliceProgress").hidden=!sheetBusy;
   $("batchDownload").disabled=processing||!jobList.some(entry=>entry.result?.layers.length);
@@ -132,6 +148,23 @@ function updateDimensions(){
   const [w,h]=outputSize(item.w,item.h,$("stock").checked);
   $("dimensions").textContent=`${count(w)} × ${count(h)} px · ${(w*h/1e6).toLocaleString("id-ID",{maximumFractionDigits:2})} MP`;
 }
+function renderVector(model){
+  const container=$("result"),outlines=view==="outline";
+  if(previewAsset){
+    if(previewAsset.model===model&&previewAsset.outlines===outlines)return;
+    URL.revokeObjectURL(previewAsset.url);
+    previewAsset=null;
+  }
+  if(!model){container.replaceChildren();return;}
+  if(model.exact&&model.layers.length>10000){
+    const url=URL.createObjectURL(new Blob([svgText(model,{outlines})],{type:"image/svg+xml"}));
+    const image=new Image();
+    image.alt="";
+    image.src=url;
+    container.replaceChildren(image);
+    previewAsset={model,outlines,url};
+  }else container.innerHTML=svgText(model,{preview:true,outlines});
+}
 function renderPreview(){
   const item=current(),result=item?.result;
   const ready=Boolean(item?.w);
@@ -145,12 +178,12 @@ function renderPreview(){
   $("splitLine").hidden=$("compareRange").hidden=!(result&&view==="compare");
   $("result").hidden=!result;
   $("metrics").hidden=!result;
+  renderVector(result);
   if(result){
-    $("result").innerHTML=svgText(result,{preview:true,outlines:view==="outline"});
     $("objects").textContent=count(result.objects);
     $("points").textContent=count(result.points);
     $("svgSize").textContent=sizeText(new Blob([svgText(result,{stock:$("stock").checked})]).size);
-  }else $("result").replaceChildren();
+  }
   document.querySelectorAll("button[data-view]").forEach(button=>{
     button.setAttribute("aria-pressed",button.dataset.view===view);
     button.disabled=!result;
@@ -232,7 +265,7 @@ function addFiles(files){
 }
 function trace(pixels,w,h,options,progress){
   if(!worker){
-    worker=new Worker(new URL("./trace-worker.mjs?v=14",import.meta.url),{type:"module"});
+    worker=new Worker(new URL("./trace-worker.mjs?v=15",import.meta.url),{type:"module"});
     worker.onmessage=event=>{
       const {progress,error,result}=event.data;
       if(!pending)return;
@@ -256,10 +289,11 @@ function trace(pixels,w,h,options,progress){
 }
 async function convert(item,options,token,progress){
   await inspect(item);
+  const [width,height]=sampleSize(item.w,item.h,options);
   let image=await imageFrame(item.url);
   if(token!==serial){image.close?.();throw new DOMException("Dibatalkan","AbortError");}
   const canvas=document.createElement("canvas");
-  [canvas.width,canvas.height]=traceSize(item.w,item.h,options.detail,options.hd);
+  canvas.width=width;canvas.height=height;
   const context=canvas.getContext("2d",{willReadFrequently:true});
   context.imageSmoothingQuality="high";
   context.drawImage(image,0,0,canvas.width,canvas.height);
@@ -411,11 +445,11 @@ async function scanSheet(){
   finally{if(request===sheetRequest)refreshButtons();}
 }
 
-async function pngFromIcon(model){
+async function pngFromIcon(model,background){
   const [w,h]=rasterSize(model.originalWidth,model.originalHeight,"1024");
   const canvas=document.createElement("canvas");
   canvas.width=w;canvas.height=h;
-  const url=URL.createObjectURL(new Blob([svgText(model,{dimensions:[w,h]})],{type:"image/svg+xml"}));
+  const url=URL.createObjectURL(new Blob([svgText(model,{dimensions:[w,h],background})],{type:"image/svg+xml"}));
   try{
     const image=await loadImage(url,{exporting:true});
     canvas.getContext("2d").drawImage(image,0,0,w,h);
@@ -426,7 +460,7 @@ async function pngFromIcon(model){
 async function sliceDownload(){
   if(!sheetPlan||sheetBusy||processing)return;
   const {item,boxes,background}=sheetPlan,format=$("sliceFormat").value;
-  const transparency=$("sliceAlpha").checked;
+  const outputBackground=$("sliceBackground").value,method=$("sliceMethod").value;
   const config={...settings(),removeWhite:false};
   const stock=$("stock").checked,base=fileName(item.name);
   sheetBusy=true;
@@ -443,25 +477,25 @@ async function sliceDownload(){
       if(request!==sheetRequest)return;
       index++;
       setSheetMessage(`Memproses ikon ${index} dari ${boxes.length}…`);
-      [canvas.width,canvas.height]=traceSize(box.w,box.h,config.detail,config.hd);
+      [canvas.width,canvas.height]=sampleSize(box.w,box.h,config);
       context.imageSmoothingQuality="high";
       context.drawImage(image,box.x,box.y,box.w,box.h,0,0,canvas.width,canvas.height);
       const raw=context.getImageData(0,0,canvas.width,canvas.height).data;
-      if(transparency)removeBorderColor(raw,canvas.width,canvas.height,background);
+      if(outputBackground!=="source")removeBorderColor(raw,canvas.width,canvas.height,background,exactMode(config)?0:24);
       const model=await trace(raw,canvas.width,canvas.height,config,()=>{});
       if(request!==sheetRequest)return;
       if(!model.layers.length){
-        if($("sliceMethod").value==="grid")continue;
+        if(method==="grid")continue;
         throw Error(`Ikon ${index} kosong setelah diproses. Periksa kisi atau coba dengan latar polos tetap ditampilkan.`);
       }
       model.originalWidth=box.w;model.originalHeight=box.h;
       const name=`${base}-${String(index).padStart(3,"0")}.${format.toLowerCase()}`;
       if(format==="PNG"){
-        const bytes=await pngFromIcon(model);
+        const bytes=await pngFromIcon(model,outputBackground);
         files.push({name,bytes});
         bytesTotal+=bytes.length;
       }else{
-        const text=svgText(model,{stock});
+        const text=svgText(model,{stock,background:outputBackground});
         files.push({name,text});
         bytesTotal+=text.length;
       }
@@ -471,7 +505,9 @@ async function sliceDownload(){
     if(request!==sheetRequest)return;
     if(!files.length)throw Error("Tidak ada ikon yang dapat diunduh.");
     saveFile(base+"-ikon.zip",zipFiles(files));
-    setSheetMessage(`${count(files.length)} file ${format} dimasukkan ke ZIP.`);
+    const backgroundLabel={transparent:"transparan",white:"putih",source:"sumber"}[outputBackground];
+    const backgroundNote=outputBackground!=="source"&&!background?" Latar polos dari sumber tidak terdeteksi.":"";
+    setSheetMessage(`${count(files.length)} file ${format} dengan latar ${backgroundLabel} dimasukkan ke ZIP.${backgroundNote}`);
   }catch(error){if(request===sheetRequest)setSheetMessage(error.message);}
   finally{
     if(request===sheetRequest){
@@ -541,7 +577,7 @@ function settingsChanged(){
   updateSettings();
   if(current()?.result&&!processing)status("Pengaturan berubah. Ketuk Buat vektor untuk memperbarui hasil.");
 }
-for(const id of ["detail","colors","threshold","noise","removeWhite","traceHD","smoothCurves","traceProfile"])$(id).oninput=settingsChanged;
+for(const id of ["detail","colors","threshold","noise","removeWhite","traceHD","smoothCurves","traceProfile","monoAuto","monoPolarity"])$(id).oninput=settingsChanged;
 document.querySelectorAll("[data-mode]").forEach(button=>button.onclick=()=>{mode=button.dataset.mode;settingsChanged();});
 document.querySelectorAll("button[data-view]").forEach(button=>button.onclick=()=>switchView(button.dataset.view));
 $("help").onclick=()=>$("guide").showModal();

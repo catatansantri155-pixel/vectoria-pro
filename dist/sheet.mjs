@@ -119,14 +119,18 @@ export function gridIcons(w,h,rows,columns){
   return boxes;
 }
 
-export function removeBorderColor(pixels,w,h,bg){
+export function removeBorderColor(pixels,w,h,bg,tolerance=24){
   if(!bg?.color)return;
   const seen=new Uint8Array(w*h),queue=new Int32Array(w*h);
   let read=0,write=0;
   function visit(i){
     if(seen[i])return;
     seen[i]=1;
-    if(matches(pixels,i*4,bg,24)){
+    const offset=i*4;
+    const backgroundPixel=tolerance===0
+      ? pixels[offset+3]===0||(pixels[offset+3]===255&&bg.color.every((value,channel)=>Math.round(value)===pixels[offset+channel]))
+      : matches(pixels,offset,bg,tolerance);
+    if(backgroundPixel){
       pixels[i*4+3]=0;
       queue[write++]=i;
     }

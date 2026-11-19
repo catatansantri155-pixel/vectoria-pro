@@ -20,8 +20,23 @@ export function traceSize(w,h,detail,hd){
 const coords=values=>values.map(round).join(" ");
 
 const polygon = ring => ring.map((point,index)=>[index?"L":"M",point]);
-const seamStroke = model => model.smooth ? .56 : .36;
+const seamStroke = model => model.monochrome ? 0 : (model.smooth ? .56 : .36);
 const sequence = commands => commands.map(([op,points])=>op+coords(points)).join("")+"Z";
+function exactPaths(layers,crop,outlines){
+  const shapes=[];
+  for(const {fill,opacity,boxes} of layers){
+    const paint=outlines?`fill="none" stroke="${fill}" stroke-width=".18"`:`fill="${fill}"${opacity<1?` fill-opacity="${opacity}"`:""}`;
+    let paths=[];
+    for(const [x,y,w,h] of boxes){
+      if(x+w<=crop.x||y+h<=crop.y||x>=crop.x+crop.w||y>=crop.y+crop.h)continue;
+      paths.push(`M${x} ${y}h${w}v${h}h-${w}Z`);
+      if(paths.length===1500){shapes.push(`<path ${paint} d="${paths.join("")}"/>`);paths=[];}
+    }
+    if(paths.length)shapes.push(`<path ${paint} d="${paths.join("")}"/>`);
+  }
+  return shapes.join("");
+}
+
 export function svgText(model,options={}){
   const {w,h,layers}=model;
   const crop=options.crop??{x:0,y:0,w,h};
@@ -29,8 +44,9 @@ export function svgText(model,options={}){
     ? outputSize(Math.round(crop.w),Math.round(crop.h),options.stock)
     : outputSize(model.originalWidth??w,model.originalHeight??h,options.stock));
   const dim=options.preview ? "" : ` width="${width}" height="${height}"`;
+  const background=options.background==="white"?`<rect width="${crop.w}" height="${crop.h}" fill="#ffffff"/>`:"";
   const gradients=[],shapes=[];
-  for(const {fill,rings,paths:geometry,regions} of layers){
+  for(const {fill,rings,paths:geometry,regions} of model.exact?[]:layers){
     const groups=new Map();
     for(const [i,ring] of rings.entries()){
       if(options.crop&&!intersects(ring,crop))continue;
@@ -46,15 +62,15 @@ export function svgText(model,options={}){
         gradients.push(`<linearGradient id="g${id}" gradientUnits="userSpaceOnUse" x1="${round(x1)}" y1="${round(y1)}" x2="${round(x2)}" y2="${round(y2)}"><stop stop-color="${startColor}"/><stop offset="1" stop-color="${endColor}"/></linearGradient>`);
         color=`url(#g${id})`;
       }
-      const paint=options.outlines ? `fill="none" stroke="${fill}" stroke-width="${round(Math.max(w,h)/545)}"` : `fill="${color}" stroke="${color}" stroke-width="${seamStroke(model)}" stroke-linejoin="round"`;
+      const paint=options.outlines ? `fill="none" stroke="${fill}" stroke-width="${round(Math.max(w,h)/545)}"` : model.monochrome ? `fill="${color}"` : `fill="${color}" stroke="${color}" stroke-width="${seamStroke(model)}" stroke-linejoin="round"`;
       shapes.push(`<path ${paint} d="${paths}"/>`);
     }
   }
   const clip=options.crop?`<clipPath id="tile"><rect width="${crop.w}" height="${crop.h}"/></clipPath>`:"";
   const definitions=clip||gradients.length?`<defs>${clip}${gradients.join("")}</defs>`:"";
-  const art=shapes.join("");
+  const art=model.exact?exactPaths(layers,crop,options.outlines):shapes.join("");
   const content=options.crop?`<g clip-path="url(#tile)"><g transform="translate(${-crop.x} ${-crop.y})">${art}</g></g>`:art;
-  return `<svg xmlns="http://www.w3.org/2000/svg"${dim} viewBox="0 0 ${crop.w} ${crop.h}" fill-rule="evenodd">${definitions}${content}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg"${dim} viewBox="0 0 ${crop.w} ${crop.h}" fill-rule="evenodd"${model.exact&&!options.outlines?' shape-rendering="crispEdges"':""}>${definitions}${background}${content}</svg>`;
 }
 function intersects(ring,crop) {
   let left=Infinity,top=Infinity,right=-Infinity,bottom=-Infinity;
@@ -64,6 +80,14 @@ function intersects(ring,crop) {
 const rgb=fill=>[1,3,5].map(i=>round(parseInt(fill.slice(i,i+2),16)/255)).join(" ");
 function drawCommands(model,pdf){
   const cmd=[];
+  if(model.exact){
+    if(model.layers.some(layer=>layer.opacity<1))throw Error("Gunakan SVG atau PNG untuk mempertahankan transparansi parsial di Presisi piksel.");
+    for(const {fill,boxes} of model.layers){
+      cmd.push(rgb(fill)+(pdf?" rg":" setrgbcolor"));
+      for(const box of boxes)cmd.push(box.join(" ")+(pdf?" re f":" rectfill"));
+    }
+    return cmd.join("\n");
+  }
   const operations=pdf?{M:"m",L:"l",C:"c"}:{M:"moveto",L:"lineto",C:"curveto"};
   for(const {fill,rings,paths} of model.layers){
     const color=rgb(fill);
@@ -73,7 +97,7 @@ function drawCommands(model,pdf){
       for(const [op,points] of paths?.[i]??polygon(ring)) cmd.push(coords(points)+" "+operations[op]);
       cmd.push(pdf?"h":"closepath");
     }
-    cmd.push(pdf?"B*":"gsave eofill grestore stroke");
+    cmd.push(model.monochrome?(pdf?"f*":"eofill"):(pdf?"B*":"gsave eofill grestore stroke"));
   }
   return cmd.join("\n");
 }

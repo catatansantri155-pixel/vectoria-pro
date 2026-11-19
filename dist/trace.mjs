@@ -108,7 +108,44 @@ function dropWhite(pixels,w,h) {
     if(p<(h-1)*w)consider(p+w);
   }
 }
-function classify(pixels,colors,threshold,tonal) {
+const luminance=(pixels,i)=>Math.round(pixels[i]*.213+pixels[i+1]*.715+pixels[i+2]*.072);
+
+function monoThreshold(pixels){
+  const histogram=new Uint32Array(256);
+  let total=0,sum=0;
+  for(let i=0;i<pixels.length;i+=4){
+    if(pixels[i+3]<128)continue;
+    const value=luminance(pixels,i);
+    histogram[value]++;
+    sum+=value;
+    total++;
+  }
+  let lower=0,lowerSum=0,best=0,first=155,last=155;
+  for(let value=0;value<255;value++){
+    lower+=histogram[value];
+    lowerSum+=histogram[value]*value;
+    if(!lower||lower===total)continue;
+    const difference=lowerSum/lower-(sum-lowerSum)/(total-lower);
+    const variance=lower*(total-lower)*difference**2;
+    if(variance>best){best=variance;first=value+1;last=first;}
+    else if(variance===best)last=value+1;
+  }
+  return Math.round((first+last)/2);
+}
+
+function classifyMono(pixels,settings){
+  const labels=new Uint8Array(pixels.length/4);
+  const threshold=settings.monoAuto?monoThreshold(pixels):settings.threshold;
+  for(let i=0;i<labels.length;i++){
+    const offset=i*4;
+    if(pixels[offset+3]<128)continue;
+    const dark=luminance(pixels,offset)<threshold;
+    if(dark!==Boolean(settings.monoInvert))labels[i]=1;
+  }
+  return labels;
+}
+
+function classify(pixels,colors,tonal) {
   const labels=new Uint8Array(pixels.length/4);
   const shift=tonal?2:3,base=256>>shift;
   const lookup=new Uint8Array(base**3);
@@ -117,7 +154,6 @@ function classify(pixels,colors,threshold,tonal) {
     const j=i*4;
     if(pixels[j+3]<128 || !colors.length) continue;
     const r=pixels[j],g=pixels[j+1],b=pixels[j+2];
-    if(threshold!==null){if(r*.213+g*.715+b*.072<threshold) labels[i]=1;continue;}
     const key=(r>>shift)*base*base+(g>>shift)*base+(b>>shift);
     if(lookup[key]===255){
       let best=Infinity,bestIndex=0;
@@ -285,7 +321,43 @@ function traceEdges(labels,w,h,colors,detail,smooth,hd,progress,tonal) {
   }
   return {layers:layers.filter(layer=>layer.rings.length),points:pointsTotal,contours,objects,w,h,smooth,...(tonal?{gradients:tonal.gradients}:{})};
 }
+function traceExact(pixels,w,h,progress){
+  const layers=new Map();
+  const rgba=i=>((pixels[i]<<24)|(pixels[i+1]<<16)|(pixels[i+2]<<8)|pixels[i+3])>>>0;
+  let previous=new Map(),objects=0;
+  for(let y=0;y<h;y++){
+    const row=new Map();
+    let x=0;
+    while(x<w){
+      const start=x++,key=rgba((y*w+start)*4);
+      if(!(key&255))continue;
+      while(x<w&&rgba((y*w+x)*4)===key)x++;
+      const width=x-start,active=previous.get(start);
+      if(active?.key===key&&active.box[2]===width){
+        active.box[3]++;
+        row.set(start,active);
+        continue;
+      }
+      let layer=layers.get(key);
+      if(!layer){
+        layer={fill:"#"+(key>>>8).toString(16).padStart(6,"0"),opacity:(key&255)/255,boxes:[]};
+        layers.set(key,layer);
+      }
+      if(++objects>1200000||layers.size>260000){
+        throw Error("Gambar terlalu kompleks untuk Presisi piksel. Bagi gambar atau pilih Otomatis untuk kurva halus.");
+      }
+      const box=[start,y,width,1];
+      layer.boxes.push(box);
+      row.set(start,{key,box});
+    }
+    if(y%32===0)progress((y+1)/h);
+    previous=row;
+  }
+  return {w,h,exact:true,layers:[...layers.values()],objects,points:objects*4};
+}
+
 export function vectorize(pixels,w,h,settings,progress=()=>{}) {
+  if(settings.mode==="color"&&settings.profile==="exact")return traceExact(pixels,w,h,progress);
   if(settings.removeWhite) dropWhite(pixels,w,h);
   progress(.17);
   const monochrome=settings.mode==="mono";
@@ -293,12 +365,12 @@ export function vectorize(pixels,w,h,settings,progress=()=>{}) {
   const useTones=!monochrome&&(settings.profile==="gradient"||(settings.profile==="auto"&&hasShading(pixels,w,h)));
   const sampled=useTones?smoothTonePixels(pixels,w,h):pixels;
   const count=useTones?Math.max(54,settings.colors*2):settings.colors;
-  const colors=monochrome?[[26,32,49]]:paletteFor(sampled,w,h,count,settings.detail,smooth,settings.hd,useTones);
+  const colors=monochrome?[[0,0,0]]:paletteFor(sampled,w,h,count,settings.detail,smooth,settings.hd,useTones);
   progress(.35);
-  const labels=classify(sampled,colors,monochrome?settings.threshold:null,useTones);
+  const labels=monochrome?classifyMono(sampled,settings):classify(sampled,colors,useTones);
   const cleaned=settings.smooth!==false&&!monochrome?cleanTransitionColors(labels,sampled,w,h,colors,settings.hd):labels;
   progress(.54);
   const shapes=removeSpecks(cleaned,w,h,useTones?Math.max(3,settings.noise):settings.noise,colors.length);
   const tones=useTones?fitRegionTones(shapes,pixels,w,h):null;
-  return traceEdges(shapes,w,h,colors,settings.detail,smooth,settings.hd,progress,tones);
+  return {...traceEdges(shapes,w,h,colors,settings.detail,smooth,settings.hd,progress,tones),monochrome};
 }

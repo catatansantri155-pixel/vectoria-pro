@@ -62,5 +62,10 @@ Buka [localhost:8000](http://localhost:8000/). Untuk uji cepat, klik **Coba cont
 - Studio Perbesar memiliki ekspor 4K dan interpolasi Lanczos atau Mitchell–Netravali untuk gambar yang sesuai batas memori. Perbesaran tidak merekonstruksi detail yang hilang.
 
 
+### Presisi piksel dan monokrom
+
+- **Presisi piksel** menyimpan warna dan transparansi piksel yang terbaca di browser sebagai bidang vektor pada resolusi sumber. Kontur mengikuti kisi sumber, sehingga kotak yang sudah ada tetap terlihat saat diperbesar. **Otomatis** membentuk kurva halus dan dapat menyesuaikan warna serta kontur. Presisi piksel dibatasi 4,5 MP, 8.192 px per sisi, 1,2 juta bidang, dan 260.000 kombinasi warna dan transparansi. Gunakan SVG atau PNG untuk transparansi parsial.
+- **Monokrom** menghasilkan bentuk hitam. Pilih bagian gelap atau terang sebagai bentuk, lalu gunakan ambang otomatis atau atur ambang manual sesuai sumber.
+
 ### Pemisah lembar ikon
-Pilih gambar sumber lalu buka **Pisahkan lembar ikon → Otomatis → Pindai ikon**. Gunakan latar polos atau transparan dan sisakan jarak. Periksa jumlah hasil sebelum mengunduh ZIP. Kisi manual mendukung sampai 20 × 20 sel. Ikon diekspor satu per satu sebagai SVG, atau sebagai PNG dengan sisi terpanjang 1.024 px. Pratinjau vektor menggunakan SVG langsung dengan pilihan zoom 300% dan geser saat diperbesar.
+Pilih gambar sumber lalu buka **Pisahkan lembar ikon → Otomatis → Pindai ikon**. Gunakan latar polos atau transparan dan sisakan jarak. Periksa jumlah hasil sebelum mengunduh ZIP. Kisi manual mendukung sampai 20 × 20 sel. Ikon diekspor satu per satu sebagai SVG, atau sebagai PNG dengan sisi terpanjang 1.024 px. Pilih latar **Transparan**, **Putih**, atau **Ikuti gambar sumber** sebelum mengunduh. Opsi Transparan dan Putih menghapus latar polos yang terdeteksi dan terhubung ke tepi. Pada mode Presisi piksel, penghapusan memakai warna latar yang sama persis. Pratinjau vektor menggunakan SVG langsung dengan pilihan zoom 300% dan geser saat diperbesar.
