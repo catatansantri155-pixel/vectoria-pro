@@ -265,7 +265,7 @@ function addFiles(files){
 }
 function trace(pixels,w,h,options,progress){
   if(!worker){
-    worker=new Worker(new URL("./trace-worker.mjs?v=17",import.meta.url),{type:"module"});
+    worker=new Worker(new URL("./trace-worker.mjs?v=18",import.meta.url),{type:"module"});
     worker.onmessage=event=>{
       const {progress,error,result}=event.data;
       if(!pending)return;
@@ -303,7 +303,7 @@ async function convert(item,options,token,progress){
   let pixels;
   try{
     // Use native edges and color samples for ink on paper before upsampling can alter them.
-    if(options.mode==="color"&&options.profile==="auto"&&width>item.w&&height>item.h){
+    if(options.mode==="color"&&(options.profile==="auto"||options.profile==="flat")&&width>item.w&&height>item.h){
       const native=sample(item.w,item.h);
       if(detectInkPaper(native,item.w,item.h))pixels=native;
     }

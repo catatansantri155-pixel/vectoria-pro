@@ -26,10 +26,10 @@ function simplify(points, anchors, tolerance){
   return [...kept].sort((a,b)=>a-b);
 }
 
-function fitChain(raw, detail, hd, closed, tonal, preserve){
+function fitChain(raw, detail, hd, closed, tonal){
   const last=raw.length-1;
   if(last<4)return raw.slice(1).map(end=>({end}));
-  const maxRadius=preserve?3:hd?(tonal?10:7):(tonal?7:5);
+  const maxRadius=hd?(tonal?10:7):(tonal?7:5);
   const radius=Math.max(1,Math.min(maxRadius,Math.floor(last/14)));
   const span=radius*2;
   const at=i=>raw[closed?(i+last)%last:Math.max(0,Math.min(last,i))];
@@ -67,7 +67,7 @@ function fitChain(raw, detail, hd, closed, tonal, preserve){
   });
   const anchors=[...new Set([0,last,...hard,...(closed?[Math.floor(last/2)]:[])])].sort((a,b)=>a-b);
   const tolerance=[1.40,1.10,.82,.63,.50][detail];
-  const indexes=simplify(points,anchors,preserve?tolerance*.70:tolerance);
+  const indexes=simplify(points,anchors,tolerance);
   const sample=Math.max(2,radius);
   const pt=i=>points[closed?(i+last)%last:Math.min(last,Math.max(0,i))];
   function tangent(i, other, incoming){
@@ -85,7 +85,7 @@ function fitChain(raw, detail, hd, closed, tonal, preserve){
       segments.push({end});continue;
     }
     // Cap the perpendicular displacement of handles so long straight runs stay straight.
-    const maxDeviation=preserve?.45:1.3;
+    const maxDeviation=1.3;
     const handleStart=Math.min(length/3,maxDeviation/Math.sqrt(Math.max(0,1-startAlignment**2)));
     const handleEnd=Math.min(length/3,maxDeviation/Math.sqrt(Math.max(0,1-endAlignment**2)));
     segments.push({end,controls:[
@@ -108,7 +108,7 @@ function reversed(geometry){
   return result;
 }
 
-export function sharedContours(width,detail,hd,tonal=false,preserve=false){
+export function sharedContours(width,detail,hd,tonal=false){
   const cache=new Map();
   const key=([x,y])=>y*(width+1)+x;
   function chain(points,closed){
@@ -127,7 +127,7 @@ export function sharedContours(width,detail,hd,tonal=false,preserve=false){
     let geometry=cache.get(label);
     if(!geometry){
       let previous=points[0];
-      geometry=fitChain(points,detail,hd,closed,tonal,preserve).map(segment=>{
+      geometry=fitChain(points,detail,hd,closed,tonal).map(segment=>{
         const result={...segment,start:previous};previous=segment.end;
         return result;
       });

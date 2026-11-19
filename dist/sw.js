@@ -1,6 +1,6 @@
-const cacheName="vektora-converter-v17";
+const cacheName="vektora-converter-v18";
 const assets=[
-  "./","./converter.css?v=15","./converter.mjs?v=17","./icons.mjs","./trace-worker.mjs?v=17","./trace.mjs?v=17","./contours.mjs?v=17","./formats.mjs?v=17","./sheet.mjs?v=17","./utilities.mjs?v=14","./image-codec.mjs?v=14","./tones.mjs?v=14","./resample-worker.mjs?v=14","./resample.mjs?v=14","./app.webmanifest?v=5",
+  "./","./converter.css?v=15","./converter.mjs?v=18","./icons.mjs","./trace-worker.mjs?v=18","./trace.mjs?v=18","./contours.mjs?v=18","./ink-contours.mjs?v=18","./formats.mjs?v=17","./sheet.mjs?v=17","./utilities.mjs?v=14","./image-codec.mjs?v=14","./tones.mjs?v=14","./resample-worker.mjs?v=14","./resample.mjs?v=14","./app.webmanifest?v=5",
   "./editor.html","./style.css?v=7","./editor.mjs?v=7","./assets/mark.svg?v=5","./assets/mark-192.png?v=5","./assets/mark-512.png?v=5","./assets/botanika.jpg"
 ];
 self.addEventListener("install",event=>{
