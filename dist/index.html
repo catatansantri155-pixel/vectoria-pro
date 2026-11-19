@@ -12,8 +12,8 @@
 <link rel="manifest" href="app.webmanifest?v=6">
 <meta name="apple-mobile-web-app-title" content="Vektora">
 <script type="module" src="pwa.mjs?v=1"></script>
-<link rel="stylesheet" href="converter.css?v=19">
-<script type="module" src="converter.mjs?v=28"></script>
+<link rel="stylesheet" href="converter.css?v=20">
+<script type="module" src="converter.mjs?v=29"></script>
 </head>
 <body>
 <header class="header"><div class="header-inner">
@@ -146,10 +146,15 @@
     </section>
     <section class="card visual"><div class="preview-head"><div><h2>Pratinjau hasil</h2><p id="utilityStatus" role="status"></p></div></div>
       <div id="upscaleCompare" class="export-panel utility-export" hidden>
-        <label><span class="sr">Tampilan perbandingan</span><select id="upscalePreviewMode"><option value="result">Hasil</option><option value="source">Gambar asli</option></select></label>
+        <label><span class="sr">Tampilan perbandingan</span><select id="upscalePreviewMode"><option value="compare">Before / After</option><option value="result">Hasil</option><option value="source">Gambar asli</option></select></label>
         <label class="check"><input id="upscaleDetail" type="checkbox"> Detail tengah</label>
       </div>
       <div class="utility-preview"><canvas id="utilityCanvas" aria-label="Pratinjau hasil studio"></canvas></div>
+      <div id="upscaleSplit" class="upscale-split" hidden>
+        <span>Before · Asli</span>
+        <input id="upscaleSplitRange" type="range" min="0" max="100" value="50" aria-label="Geser batas antara gambar asli dan hasil upscale" disabled>
+        <span>After · Hasil</span>
+      </div>
       <div class="export-panel utility-export"><label class="sr" for="utilityFormat">Format unduhan</label><select id="utilityFormat"><option>PNG</option><option>JPG</option><option id="videoOption" hidden value="VIDEO">Video loop</option></select></div>
     </section>
   </div>

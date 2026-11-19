@@ -131,19 +131,25 @@ async function recordLoop(opts,mime,onProgress){
 export function setupUtilities({$,notify,saveFile,checkFile,loadImage,prepareImageFile,rasterBlob,sampleUrl}){
   let kind="upscale",source=sampleUrl,base="botanika",serial=0,ready=false,lastGradient=null,recording=false;
   const availableVideo=videoType();
-  const preview=$("utilityCanvas");
-  let output=null,previewSource=null,controller;
+  const preview=$("utilityCanvas"),view=$("upscalePreviewMode"),split=$("upscaleSplitRange");
+  let output=null,previewSource=null,controller,previewFrame=0;
   const state=message=>$("utilityStatus").textContent=message;
-  function setReady(value){ready=value;$("utilityDownload").disabled=!ready||recording;}
+  function setReady(value){
+    ready=value;
+    $("utilityDownload").disabled=!ready||recording;
+    split.disabled=!ready||kind!=="upscale";
+  }
   function paintPreview(){
+    $("upscaleSplit").hidden=kind!=="upscale"||view.value!=="compare";
     if(!output)return;
     const isUpscale=kind==="upscale"&&previewSource;
     const detail=isUpscale&&$("upscaleDetail").checked;
     const [w,h]=detail
       ?[Math.min(480,output.width),Math.min(480,output.height)]
       :fit(output.width,output.height,800**2,800);
-    preview.width=w;preview.height=h;
+    if(preview.width!==w||preview.height!==h){preview.width=w;preview.height=h;}
     const context=preview.getContext("2d");
+    context.clearRect(0,0,w,h);
     context.imageSmoothingQuality="high";
     if(!isUpscale){
       context.drawImage(output,0,0,w,h);
@@ -151,11 +157,30 @@ export function setupUtilities({$,notify,saveFile,checkFile,loadImage,prepareIma
     }
     const cropW=detail?w:output.width,cropH=detail?h:output.height;
     const x=(output.width-cropW)/2,y=(output.height-cropH)/2;
-    const original=$("upscalePreviewMode").value==="source";
-    const image=original?previewSource:output;
-    const scaleX=original?previewSource.naturalWidth/output.width:1;
-    const scaleY=original?previewSource.naturalHeight/output.height:1;
-    context.drawImage(image,x*scaleX,y*scaleY,cropW*scaleX,cropH*scaleY,0,0,w,h);
+    function drawSource(){
+      const sx=previewSource.naturalWidth/output.width,sy=previewSource.naturalHeight/output.height;
+      context.drawImage(previewSource,x*sx,y*sy,cropW*sx,cropH*sy,0,0,w,h);
+    }
+    const boundary=Math.round(w*split.valueAsNumber/100);
+    const compare=view.value==="compare";
+    if(view.value==="source"||(compare&&boundary===w)){
+      drawSource();
+      return;
+    }
+    context.drawImage(output,x,y,cropW,cropH,0,0,w,h);
+    if(!compare||boundary===0)return;
+
+    context.save();
+    context.beginPath();
+    context.rect(0,0,boundary,h);
+    context.clip();
+    context.clearRect(0,0,w,h);
+    drawSource();
+    context.restore();
+    context.fillStyle="#2b2039";
+    context.fillRect(boundary-2,0,4,h);
+    context.fillStyle="#fff";
+    context.fillRect(boundary-1,0,2,h);
   }
   function gradientOptions(){
     const angle=$("angle").valueAsNumber;
@@ -243,7 +268,14 @@ export function setupUtilities({$,notify,saveFile,checkFile,loadImage,prepareIma
     run();
   };
   $("utilityRun").onclick=run;
-  $("upscalePreviewMode").onchange=$("upscaleDetail").onchange=paintPreview;
+  view.onchange=$("upscaleDetail").onchange=paintPreview;
+  split.oninput=()=>{
+    if(previewFrame)return;
+    previewFrame=requestAnimationFrame(()=>{
+      previewFrame=0;
+      paintPreview();
+    });
+  };
   $("gradientPreset").onchange=()=>{setPalette();run();};
   for(const id of ["gradientFirst","gradientSecond","gradientRatio","angle","grain","patternStyle","upscaleFactor","sharpen"])$(id).onchange=run;
   $("utilityDownload").onclick=async()=>{
@@ -273,6 +305,7 @@ export function setupUtilities({$,notify,saveFile,checkFile,loadImage,prepareIma
   };
   return function open(studio){
     kind=studio;
+    $("upscaleSplit").hidden=studio!=="upscale"||view.value!=="compare";
     const isGradient=studio==="gradient";
     [$("utilityTitle").textContent,$("utilityDescription").textContent]=studioCopy[studio];
     $("upscaleFields").hidden=$("upscaleCompare").hidden=studio!=="upscale";
