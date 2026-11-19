@@ -1,4 +1,4 @@
-import {vectorize} from "./trace.mjs?v=19";
+import {vectorize} from "./trace.mjs?v=20";
 
 self.onmessage=event=>{
   const {id,pixels,w,h,settings}=event.data;

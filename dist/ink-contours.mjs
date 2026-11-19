@@ -75,3 +75,60 @@ export function roundInkJoins(ring,limit){
   }
   return commands;
 }
+
+const RIDGE_AXES=[[1,0],[0,1],[1,1],[1,-1]];
+
+// Recover a faint stroke only when there is contrast on both sides and a continuation.
+export function reinforceInkStrokes(field,pixels,w,h){
+  const stride=w+2, additions=new Uint8Array(field.length);
+  for(let y=3;y<h;y++){
+    for(let x=3;x<w;x++){
+      const i=y*stride+x,value=field[i];
+      const alpha=pixels[((y-1)*w+x-1)*4+3];
+      if(alpha<128||value>=0||value< -70)continue;
+      for(const [dx,dy] of RIDGE_AXES){
+        const across=dx+dy*stride,along=dy-dx*stride;
+        const edge=Math.max(field[i-across],field[i+across]);
+        if(edge>value-28)continue;
+        const aligned=[i-along,i+along].some(j=>Math.abs(field[j]-value)<=18&&
+          Math.max(field[j-across],field[j+across])<=field[j]-24);
+        if(aligned)additions[i]=Math.min(alpha-127,Math.round(-edge*.88));
+      }
+    }
+  }
+  for(let i=0;i<field.length;i++){
+    if(additions[i])field[i]=additions[i]-.5;
+  }
+}
+
+export function steadyInkRing(ring){
+  if(ring.length<16)return ring;
+  const span=1.6,n=ring.length;
+  function sample(i,direction){
+    let distance=0;
+    let current=ring[i];
+    for(let step=1;step<n;step++){
+      const next=ring[(i+step*direction+n)%n];
+      const length=Math.hypot(next[0]-current[0],next[1]-current[1]);
+      if(!length)continue;
+      if(distance+length>=span){
+        const t=(span-distance)/length;
+        return [current[0]+(next[0]-current[0])*t,current[1]+(next[1]-current[1])*t];
+      }
+      distance+=length;
+      current=next;
+    }
+    return current;
+  }
+  return ring.map(([x,y],i)=>{
+    const a=sample(i,-1),b=sample(i,1);
+    const ax=x-a[0],ay=y-a[1],bx=b[0]-x,by=b[1]-y;
+    const length=Math.hypot(ax,ay)*Math.hypot(bx,by);
+    if(!length||(ax*bx+ay*by)/length<.79)return ring[i];
+    const chord=Math.hypot(ax+bx,ay+by);
+    if(!chord)return ring[i];
+    const nx=-(ay+by)/chord,ny=(ax+bx)/chord;
+    const shift=Math.max(-.085,Math.min(.085,((bx-ax)*nx+(by-ay)*ny)*.28));
+    return [x+nx*shift,y+ny*shift];
+  });
+}

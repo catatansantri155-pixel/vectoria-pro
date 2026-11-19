@@ -1,4 +1,4 @@
-import {isoRings,roundInkJoins} from "./ink-contours.mjs?v=19";
+import {isoRings,reinforceInkStrokes,roundInkJoins,steadyInkRing} from "./ink-contours.mjs?v=20";
 import {fitRegionTones,hasShading,smoothTonePixels} from "./tones.mjs?v=14";
 import {sharedContours} from "./contours.mjs?v=18";
 import {detectInkPaper,luminance} from "./sheet.mjs?v=17";
@@ -131,18 +131,6 @@ function monoThreshold(pixels){
     else if(variance===best)last=value+1;
   }
   return Math.round((first+last)/2);
-}
-
-function classifyMono(pixels,settings){
-  const labels=new Uint8Array(pixels.length/4);
-  const threshold=settings.monoAuto?monoThreshold(pixels):settings.threshold;
-  for(let i=0;i<labels.length;i++){
-    const offset=i*4;
-    if(pixels[offset+3]<128)continue;
-    const dark=luminance(pixels,offset)<threshold;
-    if(dark!==Boolean(settings.monoInvert))labels[i]=1;
-  }
-  return labels;
 }
 
 function classify(pixels,colors,tonal) {
@@ -356,24 +344,39 @@ function traceExact(pixels,w,h,progress){
   return {w,h,exact:true,layers:[...layers.values()],objects,points:objects*4};
 }
 
-function traceMonoLayer(pixels,w,h,settings,threshold,invert,color,noise,progress){
-  const labels=classifyMono(pixels,{threshold,monoInvert:invert});
-  const clean=removeSpecks(labels,w,h,noise,1,true);
+function traceMonoLayer(pixels,w,h,settings,threshold,invert,color,noise,progress,protectStrokes=false){
   const stride=w+2,field=new Float32Array(stride*(h+2));
   field.fill(-127.5);
   const direction=invert?1:-1;
   for(let y=0;y<h;y++){
     for(let x=0;x<w;x++){
-      const index=y*w+x,offset=index*4;
+      const offset=(y*w+x)*4;
       const value=Math.min(direction*(luminance(pixels,offset)-threshold+.5),pixels[offset+3]-127.5);
-      field[(y+1)*stride+x+1]=clean[index]===labels[index]?value:-Math.max(.5,Math.abs(value));
+      field[(y+1)*stride+x+1]=value;
+    }
+  }
+  if(protectStrokes)reinforceInkStrokes(field,pixels,w,h);
+  if(noise){
+    const labels=new Uint8Array(w*h);
+    for(let y=0;y<h;y++){
+      for(let x=0;x<w;x++)labels[y*w+x]=field[(y+1)*stride+x+1]>0?1:0;
+    }
+    const clean=removeSpecks(labels,w,h,noise,1,true);
+    for(let y=0;y<h;y++){
+      for(let x=0;x<w;x++){
+        const i=y*w+x;
+        if(labels[i]&&!clean[i]){
+          const pos=(y+1)*stride+x+1;
+          field[pos]=-Math.max(.5,field[pos]);
+        }
+      }
     }
   }
   const tolerance=settings.smooth===false?0:[.28,.22,.16,.12,.08][settings.detail];
   const rings=[],paths=[];
   let objects=0,points=0;
   for(const contour of isoRings(field,w,h,progress)){
-    const ring=tolerance?simplify(contour,tolerance):contour;
+    const ring=tolerance?simplify(steadyInkRing(contour),tolerance):contour;
     let area=0;
     for(let i=0,j=ring.length-1;i<ring.length;j=i++){
       area+=ring[j][0]*ring[i][1]-ring[i][0]*ring[j][1];
@@ -390,7 +393,7 @@ function traceMonoLayer(pixels,w,h,settings,threshold,invert,color,noise,progres
 }
 
 function traceInk(pixels,w,h,settings,paper,includePaper,progress){
-  const model=traceMonoLayer(pixels,w,h,settings,paper.inkThreshold,false,paper.inkColor,settings.noise,progress);
+  const model=traceMonoLayer(pixels,w,h,settings,paper.inkThreshold,false,paper.inkColor,Math.max(0,settings.noise-2),progress,true);
   if(!includePaper)return model;
   model.backgroundFill=hex(paper.paperColor);
   if(paper.accent){
@@ -419,7 +422,7 @@ export function vectorize(pixels,w,h,settings,progress=()=>{}) {
   if(!monochrome&&paper)return traceInk(pixels,w,h,settings,paper,!settings.removeWhite&&!isolatedPaper,progress);
   if(monochrome){
     const threshold=settings.monoAuto?monoThreshold(pixels):settings.threshold;
-    const model=traceMonoLayer(pixels,w,h,settings,threshold,Boolean(settings.monoInvert),[0,0,0],settings.noise,progress);
+    const model=traceMonoLayer(pixels,w,h,settings,threshold,Boolean(settings.monoInvert),[0,0,0],Math.max(0,settings.noise-2),progress,settings.monoAuto);
     if(settings.monoBackground==="white")model.backgroundFill="#ffffff";
     return model;
   }
