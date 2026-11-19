@@ -60,7 +60,7 @@ function resizeInWorker(image,canvas,sharp){
   const pixels=input.getImageData(0,0,w,h).data;
   source.width=source.height=0;
   return new Promise((resolve,reject)=>{
-    const worker=new Worker(new URL("./resample-worker.mjs?v=13",import.meta.url),{type:"module"});
+    const worker=new Worker(new URL("./resample-worker.mjs?v=14",import.meta.url),{type:"module"});
     worker.onmessage=({data})=>{
       worker.terminate();
       if(data.error){reject(Error(data.error));return;}

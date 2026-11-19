@@ -128,8 +128,8 @@ function crc32(bytes){
 export function zipFiles(files){
   const contents=[],directory=[];
   let offset=0,directorySize=0;
-  for(const {name,text} of files){
-    const title=encoder.encode(name),body=encoder.encode(text),checksum=crc32(body);
+  for(const {name,text,bytes} of files){
+    const title=encoder.encode(name),body=bytes??encoder.encode(text),checksum=crc32(body);
     const header=new Uint8Array(30),entry=new Uint8Array(46);
     const h=new DataView(header.buffer),d=new DataView(entry.buffer);
     h.setUint32(0,0x04034b50,true);

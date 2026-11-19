@@ -5,7 +5,7 @@ Konverter JPG, PNG, WebP, BMP, GIF, dan AVIF dengan pemrosesan lokal. GIF dipros
 ## Studio
 
 - **Vektor** menangkap kontur sebagai path. Pilih mode warna atau monokrom, atur detail, warna, ambang, pembersihan bintik dan latar putih, lalu bandingkan hasil. Zoom berpusat pada pratinjau. Hasil dapat diekspor sebagai SVG, EPS, PDF, PNG, atau JPG.
-- **Lembar ikon** membagi gambar menjadi kisi hingga 8 × 8 dengan sel sama besar. Hasil batch dan potongan diunduh sebagai ZIP berisi SVG individual. Unggah file SVG atau EPS satu per satu ke Adobe Stock.
+- **Lembar ikon** mendeteksi ikon terpisah pada latar polos atau transparan, dengan opsi kisi manual hingga 20 × 20. Hasil diunduh sebagai ZIP berisi SVG individual atau PNG. Unggah file SVG atau EPS satu per satu ke Adobe Stock.
 - **Perbesar** memakai interpolasi browser dan penajaman tepi opsional. Resolusi keluaran dibatasi 16 MP untuk mengendalikan memori.
 - **Pola** membantu membuat ubin dengan pengulangan biasa atau cermin empat arah.
 - **Gradien** membuat gradien bertekstur opsional dengan empat palet, rasio, dan arah yang dapat diedit. Ekspor loop empat detik tersedia jika browser mendukung MediaRecorder dan Canvas CaptureStream.
@@ -60,3 +60,7 @@ Buka [localhost:8000](http://localhost:8000/). Untuk uji cepat, klik **Coba cont
 - Gaya pelacakan Otomatis mendeteksi gambar dengan banyak tingkatan warna. Mode Ilustrasi 3D memasang palet yang lebih rapat dan gradien vektor lokal. Pilih SVG untuk menyimpan gradien yang bisa diedit atau PNG/JPG untuk tampilan raster. EPS/PDF masih menggunakan warna datar.
 - Vektora membaca tanda format di dalam file dan mencoba jalur pemuatan biasa jika dekode langsung gagal. Format yang tidak didukung tetap bergantung pada dekoder browser. Ekspor ulang file yang gagal sebagai PNG atau JPG.
 - Studio Perbesar memiliki ekspor 4K dan interpolasi Lanczos atau Mitchell–Netravali untuk gambar yang sesuai batas memori. Perbesaran tidak merekonstruksi detail yang hilang.
+
+
+### Pemisah lembar ikon
+Pilih gambar sumber lalu buka **Pisahkan lembar ikon → Otomatis → Pindai ikon**. Gunakan latar polos atau transparan dan sisakan jarak. Periksa jumlah hasil sebelum mengunduh ZIP. Kisi manual mendukung sampai 20 × 20 sel. Ikon diekspor satu per satu sebagai SVG, atau sebagai PNG dengan sisi terpanjang 1.024 px. Pratinjau vektor menggunakan SVG langsung dengan pilihan zoom 300% dan geser saat diperbesar.

@@ -1,4 +1,4 @@
-import {resample} from "./resample.mjs?v=13";
+import {resample} from "./resample.mjs?v=14";
 self.onmessage=({data:{pixels,w,h,width,height,sharp}})=>{
   try{
     const output=resample(pixels,w,h,width,height,sharp);

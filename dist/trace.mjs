@@ -1,5 +1,5 @@
-import {fitRegionTones,hasShading,smoothTonePixels} from "./tones.mjs?v=13";
-import {sharedContours} from "./contours.mjs?v=13";
+import {fitRegionTones,hasShading,smoothTonePixels} from "./tones.mjs?v=14";
+import {sharedContours} from "./contours.mjs?v=14";
 
 const DIRECTIONS = [[1,0],[0,1],[-1,0],[0,-1]];
 const SEARCH_DIRECTIONS = [...DIRECTIONS,[-1,-1],[1,-1],[-1,1],[1,1]];

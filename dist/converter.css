@@ -87,11 +87,18 @@ input[type=checkbox]{width:17px;height:17px;margin:0;accent-color:var(--purple);
 .zoom button,.icon{min-height:35px;min-width:34px;display:grid;place-items:center;background:white;color:#635674;border-radius:7px;padding:0 5px;font-size:11px;font-weight:640}
 .icon svg{width:15px;height:15px}
 .icon:hover,.zoom button:hover{background:var(--soft)}
-.checker{background-color:#f0edf5;background-image:conic-gradient(#e8e3ef 25%,transparent 0 50%,#e8e3ef 0 75%,transparent 0);background-size:20px 20px}
 .canvas{position:relative;isolation:isolate;height:clamp(240px,66vw,495px);margin:0 11px;border-radius:10px;display:grid;place-items:center;overflow:hidden;--split:50%}
 .art{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:var(--art-width,100%);height:var(--art-height,100%);pointer-events:none}
 .art img{position:absolute;inset:0;display:block;width:100%;height:100%;object-fit:contain;user-select:none}
-.canvas[data-view=compare] #result{clip-path:inset(0 0 0 var(--image-split,50%));background-color:#f0edf5;background-image:conic-gradient(#e8e3ef 25%,transparent 0 50%,#e8e3ef 0 75%,transparent 0);background-size:20px 20px}
+.canvas,.utility-preview,.canvas[data-view=compare] #result{background-color:#fff}
+#result{position:absolute;inset:0}
+#result svg{display:block;width:100%;height:100%;shape-rendering:geometricPrecision}
+.canvas[data-view=compare] #result{clip-path:inset(0 0 0 var(--image-split,50%))}
+.canvas[data-pan=true]{cursor:grab;touch-action:none}
+.canvas[data-pan=true]:active{cursor:grabbing}
+.art{left:calc(50% + var(--pan-x,0px));top:calc(50% + var(--pan-y,0px))}
+#zoomLevel{max-width:73px;padding:0 2px;min-height:35px;background:transparent;border:0;font-size:11px}
+#sliceProgress{width:min(100%,180px);align-self:center}
 .canvas[data-view=result] #original,.canvas[data-view=outline] #original{visibility:hidden}
 .canvas-label{position:absolute;z-index:2;top:9px;background:#241a35ce;color:white;border-radius:5px;font-size:10px;font-weight:730;padding:4px 7px}
 .source-label{left:9px}
@@ -250,3 +257,6 @@ h2{font-weight:630}
 @media(prefers-reduced-transparency:reduce){
   .header,.card,.app-dock{background:#faf8ff;backdrop-filter:none;-webkit-backdrop-filter:none}
 }
+
+#sliceOverlay{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1}
+#sliceOverlay rect{fill:none;stroke:#7147df;stroke-width:1.5px;vector-effect:non-scaling-stroke}

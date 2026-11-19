@@ -1,6 +1,7 @@
-import {epsText,outputSize,pdfText,rasterSize,svgText,traceSize,zipFiles} from "./formats.mjs?v=13";
-import {setupUtilities} from "./utilities.mjs?v=13";
-import {loadImage,prepareImageFile} from "./image-codec.mjs?v=13";
+import {epsText,outputSize,pdfText,rasterSize,svgText,traceSize,zipFiles} from "./formats.mjs?v=14";
+import {setupUtilities} from "./utilities.mjs?v=14";
+import {loadImage,prepareImageFile} from "./image-codec.mjs?v=14";
+import {detectIcons,gridIcons,removeBorderColor} from "./sheet.mjs?v=14";
 import {mountIcons} from "./icons.mjs";
 
 const $=id=>document.getElementById(id);
@@ -52,7 +53,10 @@ function rasterBlob(canvas,format){
 }
 
 let jobList=[],selected=0,studio="vector",mode="color",view="compare",zoom=1,serial=0;
-let worker=null,pending=null,processing=false,previewUrl;
+let worker=null,pending=null,processing=false;
+let sheetPlan=null,sheetBusy=false,sheetRequest=0;
+const levels=[1,1.5,2,3,4,6,8];
+let panX=0,panY=0,pan=null;
 const current=()=>jobList[selected];
 const label=id=>Number($(id).value);
 const settings=()=>({mode,colors:label("colors"),threshold:label("threshold"),detail:label("detail"),noise:label("noise"),removeWhite:$("removeWhite").checked,hd:$("traceHD").checked,smooth:$("smoothCurves").checked,profile:$("traceProfile").value});
@@ -68,15 +72,20 @@ function updateSettings(){
 function status(message){$("status").textContent=message;}
 function refreshButtons(){
   const item=current(),has=Boolean(item?.result);
-  $("run").disabled=processing||!jobList.length;
+  $("run").disabled=processing||sheetBusy||!jobList.length;
   $("cancel").hidden=!processing;
   $("progressBox").hidden=!processing;
   $("run").lastChild.textContent=jobList.length>1?`Proses ${jobList.length} gambar`:"Buat vektor";
   $("download").disabled=!has||!item.result.layers.length;
-  $("slice").hidden=!has;
+  $("slice").hidden=!item?.w;
+  $("sliceScan").disabled=processing||sheetBusy;
+  $("sliceDownload").disabled=processing||sheetBusy||!sheetPlan?.boxes.length;
+  $("sliceCancel").hidden=!sheetBusy;
+  $("sliceProgress").hidden=!sheetBusy;
   $("batchDownload").disabled=processing||!jobList.some(entry=>entry.result?.layers.length);
   $("zoomIn").disabled=zoom>=8||!item;
   $("zoomOut").disabled=zoom<=1||!item;
+  $("zoomLevel").disabled=!item?.w;
 }
 function updateQueue(){
   $("queueBox").hidden=jobList.length<2;
@@ -97,7 +106,14 @@ function sizeArtwork(){
   canvas.style.setProperty("--art-width",width*zoom+"px");
   canvas.style.setProperty("--art-height",height*zoom+"px");
   canvas.style.setProperty("--image-split",((split-.5)*canvas.clientWidth/(width*zoom)+.5)*100+"%");
-  $("zoomReset").textContent=zoom*100+"%";
+  const limitX=Math.max(0,(width*zoom-canvas.clientWidth)/2);
+  const limitY=Math.max(0,(height*zoom-canvas.clientHeight)/2);
+  panX=Math.max(-limitX,Math.min(limitX,panX));
+  panY=Math.max(-limitY,Math.min(limitY,panY));
+  canvas.style.setProperty("--pan-x",panX+"px");
+  canvas.style.setProperty("--pan-y",panY+"px");
+  canvas.dataset.pan=String(canvas.dataset.view!=="compare"&&zoom>1);
+  $("zoomLevel").value=String(zoom);
 }
 function updateDimensions(){
   const item=current();
@@ -129,14 +145,12 @@ function renderPreview(){
   $("splitLine").hidden=$("compareRange").hidden=!(result&&view==="compare");
   $("result").hidden=!result;
   $("metrics").hidden=!result;
-  if(previewUrl){URL.revokeObjectURL(previewUrl);previewUrl=undefined;}
   if(result){
-    previewUrl=URL.createObjectURL(new Blob([svgText(result,{preview:true,outlines:view==="outline"})],{type:"image/svg+xml"}));
-    $("result").src=previewUrl;
+    $("result").innerHTML=svgText(result,{preview:true,outlines:view==="outline"});
     $("objects").textContent=count(result.objects);
     $("points").textContent=count(result.points);
     $("svgSize").textContent=sizeText(new Blob([svgText(result,{stock:$("stock").checked})]).size);
-  }else $("result").removeAttribute("src");
+  }else $("result").replaceChildren();
   document.querySelectorAll("button[data-view]").forEach(button=>{
     button.setAttribute("aria-pressed",button.dataset.view===view);
     button.disabled=!result;
@@ -174,6 +188,8 @@ async function inspect(item){
 async function selectItem(index){
   selected=index;
   zoom=1;
+  panX=panY=0;
+  resetSheet();
   $("compareRange").value=50;
   const item=current();
   renderPreview();
@@ -216,7 +232,7 @@ function addFiles(files){
 }
 function trace(pixels,w,h,options,progress){
   if(!worker){
-    worker=new Worker(new URL("./trace-worker.mjs?v=13",import.meta.url),{type:"module"});
+    worker=new Worker(new URL("./trace-worker.mjs?v=14",import.meta.url),{type:"module"});
     worker.onmessage=event=>{
       const {progress,error,result}=event.data;
       if(!pending)return;
@@ -256,7 +272,7 @@ async function convert(item,options,token,progress){
   return result;
 }
 async function run({reveal=false}={}){
-  if(processing||!jobList.length)return;
+  if(processing||sheetBusy||!jobList.length)return;
   processing=true;
   const token=++serial,options=settings();
   for(const item of jobList){item.result=null;item.error=null;}
@@ -291,10 +307,12 @@ async function run({reveal=false}={}){
 function switchView(target){
   if(!current()?.result)return;
   view=target;
+  if(view==="compare")panX=panY=0;
   renderPreview();
 }
 function changeZoom(value){
-  zoom=Math.min(8,Math.max(1,value));
+  if(!levels.includes(value))return;
+  zoom=value;
   sizeArtwork();
   refreshButtons();
 }
@@ -330,22 +348,137 @@ function batchDownload(){
   }));
   if(files.length)saveFile("vektora-batch.zip",zipFiles(files));
 }
-function sliceDownload(){
-  const item=current(),model=item?.result;
-  if(!model?.layers.length)return;
-  const rows=label("rows"),columns=label("columns");
-  if(![rows,columns].every(value=>Number.isInteger(value)&&value>=1&&value<=8)){notify("Isi 1–8 baris dan kolom.");return;}
-  if(rows*columns<2 || rows>model.h || columns>model.w){notify("Gunakan minimal dua sel dan pastikan gambar cukup besar.");return;}
-  if(model.points*rows*columns>5500000){notify("Lembar ini terlalu rumit untuk banyak potongan. Kurangi detail atau jumlah sel.");return;}
-  const files=[],base=fileName(item.name),w=model.w/columns,h=model.h/rows;
-  for(let row=0;row<rows;row++){
-    for(let col=0;col<columns;col++){
-      const x=col*w,y=row*h;
-      const crop={x,y,w,h};
-      files.push({name:`${base}-${row+1}-${col+1}.svg`,text:svgText(model,{stock:$("stock").checked,crop})});
+function renderSheetBoxes(){
+  const overlay=$("sliceOverlay"),show=Boolean(sheetPlan&&$("sliceShowBoxes").checked&&$("slice").open);
+  $("sliceShow").hidden=!sheetPlan;
+  overlay.hidden=!show;
+  if(!show){overlay.replaceChildren();return;}
+  const {item,boxes}=sheetPlan;
+  overlay.setAttribute("viewBox",`0 0 ${item.w} ${item.h}`);
+  overlay.innerHTML=boxes.map(({x,y,w,h})=>`<rect x="${x}" y="${y}" width="${w}" height="${h}"/>`).join("");
+}
+function setSheetMessage(message){$("sliceStatus").textContent=message;}
+function resetSheet(){
+  sheetRequest++;
+  if(sheetBusy)stopProcessing();
+  sheetBusy=false;
+  sheetPlan=null;
+  renderSheetBoxes();
+  setSheetMessage("Pindai lembar untuk memastikan jumlah ikon.");
+  refreshButtons();
+}
+async function scanSheet(){
+  const item=current();
+  if(!item?.w||processing||sheetBusy)return;
+  const request=++sheetRequest,method=$("sliceMethod").value;
+  sheetPlan=null;
+  renderSheetBoxes();
+  $("sliceScan").disabled=true;
+  $("sliceDownload").disabled=true;
+  setSheetMessage("Memindai posisi ikon…");
+  try{
+    const image=await loadImage(item.url);
+    if(request!==sheetRequest)return;
+    const sample=document.createElement("canvas");
+    const scale=Math.min(1,1500/Math.max(item.w,item.h));
+    sample.width=Math.max(1,Math.round(item.w*scale));
+    sample.height=Math.max(1,Math.round(item.h*scale));
+    const context=sample.getContext("2d",{willReadFrequently:true});
+    context.drawImage(image,0,0,sample.width,sample.height);
+    const pixels=context.getImageData(0,0,sample.width,sample.height);
+    let boxes,background;
+    if(method==="auto"){
+      const found=detectIcons(pixels.data,sample.width,sample.height);
+      background=found.background;
+      if(found.boxes.length<2)throw Error("Kurang dari dua ikon terpisah terdeteksi. Periksa jarak antarikon atau pilih kisi manual.");
+      boxes=found.boxes.map(({x,y,w,h})=>({
+        x:Math.floor(x*item.w/sample.width),y:Math.floor(y*item.h/sample.height),
+        w:Math.min(item.w,Math.ceil((x+w)*item.w/sample.width))-Math.floor(x*item.w/sample.width),
+        h:Math.min(item.h,Math.ceil((y+h)*item.h/sample.height))-Math.floor(y*item.h/sample.height)
+      }));
+    }else{
+      const rows=label("rows"),columns=label("columns");
+      if(![rows,columns].every(value=>Number.isInteger(value)&&value>=1&&value<=20)||
+        rows*columns<2||rows>item.h||columns>item.w)throw Error("Masukkan 1–20 baris dan kolom, dengan minimal 2 sel.");
+      boxes=gridIcons(item.w,item.h,rows,columns);
+      try{background=detectIcons(pixels.data,sample.width,sample.height).background;}catch{}
+    }
+    if(request!==sheetRequest)return;
+    sheetPlan={item,boxes,background};
+    renderSheetBoxes();
+    setSheetMessage(`${count(boxes.length)} ${method==="auto"?"ikon terdeteksi":"potongan kisi siap"}.`);
+  }catch(error){if(request===sheetRequest)setSheetMessage(error.message);}
+  finally{if(request===sheetRequest)refreshButtons();}
+}
+
+async function pngFromIcon(model){
+  const [w,h]=rasterSize(model.originalWidth,model.originalHeight,"1024");
+  const canvas=document.createElement("canvas");
+  canvas.width=w;canvas.height=h;
+  const url=URL.createObjectURL(new Blob([svgText(model,{dimensions:[w,h]})],{type:"image/svg+xml"}));
+  try{
+    const image=await loadImage(url,{exporting:true});
+    canvas.getContext("2d").drawImage(image,0,0,w,h);
+    return new Uint8Array(await (await rasterBlob(canvas,"PNG")).arrayBuffer());
+  }finally{URL.revokeObjectURL(url);canvas.width=canvas.height=0;}
+}
+
+async function sliceDownload(){
+  if(!sheetPlan||sheetBusy||processing)return;
+  const {item,boxes,background}=sheetPlan,format=$("sliceFormat").value;
+  const transparency=$("sliceAlpha").checked;
+  const config={...settings(),removeWhite:false};
+  const stock=$("stock").checked,base=fileName(item.name);
+  sheetBusy=true;
+  const request=++sheetRequest;
+  $("sliceProgress").value=0;
+  refreshButtons();
+  let index=0,bytesTotal=0;
+  const files=[];
+  try{
+    const image=await loadImage(item.url);
+    const canvas=document.createElement("canvas");
+    const context=canvas.getContext("2d",{willReadFrequently:true});
+    for(const box of boxes){
+      if(request!==sheetRequest)return;
+      index++;
+      setSheetMessage(`Memproses ikon ${index} dari ${boxes.length}…`);
+      [canvas.width,canvas.height]=traceSize(box.w,box.h,config.detail,config.hd);
+      context.imageSmoothingQuality="high";
+      context.drawImage(image,box.x,box.y,box.w,box.h,0,0,canvas.width,canvas.height);
+      const raw=context.getImageData(0,0,canvas.width,canvas.height).data;
+      if(transparency)removeBorderColor(raw,canvas.width,canvas.height,background);
+      const model=await trace(raw,canvas.width,canvas.height,config,()=>{});
+      if(request!==sheetRequest)return;
+      if(!model.layers.length){
+        if($("sliceMethod").value==="grid")continue;
+        throw Error(`Ikon ${index} kosong setelah diproses. Periksa kisi atau coba dengan latar polos tetap ditampilkan.`);
+      }
+      model.originalWidth=box.w;model.originalHeight=box.h;
+      const name=`${base}-${String(index).padStart(3,"0")}.${format.toLowerCase()}`;
+      if(format==="PNG"){
+        const bytes=await pngFromIcon(model);
+        files.push({name,bytes});
+        bytesTotal+=bytes.length;
+      }else{
+        const text=svgText(model,{stock});
+        files.push({name,text});
+        bytesTotal+=text.length;
+      }
+      if(bytesTotal>120e6)throw Error("Arsip melebihi 120 MB. Pilih SVG atau bagi lembar menjadi beberapa bagian.");
+      $("sliceProgress").value=index/boxes.length;
+    }
+    if(request!==sheetRequest)return;
+    if(!files.length)throw Error("Tidak ada ikon yang dapat diunduh.");
+    saveFile(base+"-ikon.zip",zipFiles(files));
+    setSheetMessage(`${count(files.length)} file ${format} dimasukkan ke ZIP.`);
+  }catch(error){if(request===sheetRequest)setSheetMessage(error.message);}
+  finally{
+    if(request===sheetRequest){
+      sheetBusy=false;
+      refreshButtons();
     }
   }
-  saveFile(base+"-potongan.zip",zipFiles(files));
 }
 
 $("drop").onclick=$("dockPick").onclick=()=>$("file").click();
@@ -369,15 +502,40 @@ $("run").onclick=()=>run({reveal:true});
 $("cancel").onclick=()=>{stopProcessing();renderPreview();status("Proses dibatalkan.");};
 $("download").onclick=downloadResult;
 $("sliceDownload").onclick=sliceDownload;
+$("sliceScan").onclick=scanSheet;
+$("slice").ontoggle=$("sliceShowBoxes").onchange=renderSheetBoxes;
+$("sliceCancel").onclick=()=>{
+  sheetRequest++;
+  sheetBusy=false;
+  stopProcessing();
+  setSheetMessage("Ekspor dibatalkan. Hasil pemindaian masih siap.");
+  refreshButtons();
+};
+$("sliceMethod").onchange=()=>{
+  $("gridFields").hidden=$("sliceMethod").value!=="grid";
+  resetSheet();
+};
+$("rows").oninput=$("columns").oninput=resetSheet;
 $("format").onchange=$("rasterSize").onchange=updateDimensions;
 $("stock").onchange=()=>{
   updateDimensions();
   if(current()?.result)$("svgSize").textContent=sizeText(new Blob([svgText(current().result,{stock:$("stock").checked})]).size);
 };
 $("compareRange").oninput=sizeArtwork;
-$("zoomIn").onclick=()=>changeZoom(zoom<2?2:zoom*2);
-$("zoomOut").onclick=()=>changeZoom(zoom/2);
-$("zoomReset").onclick=()=>changeZoom(1);
+$("zoomIn").onclick=()=>changeZoom(levels[levels.indexOf(zoom)+1]);
+$("zoomOut").onclick=()=>changeZoom(levels[levels.indexOf(zoom)-1]);
+$("zoomLevel").onchange=()=>changeZoom(label("zoomLevel"));
+$("canvas").onpointerdown=event=>{
+  if($("canvas").dataset.pan!=="true"||event.button!==0)return;
+  pan={id:event.pointerId,x:event.clientX-panX,y:event.clientY-panY};
+  $("canvas").setPointerCapture(event.pointerId);
+};
+$("canvas").onpointermove=event=>{
+  if(pan?.id!==event.pointerId)return;
+  panX=event.clientX-pan.x;panY=event.clientY-pan.y;
+  sizeArtwork();
+};
+$("canvas").onlostpointercapture=() => {pan=null;};
 new ResizeObserver(sizeArtwork).observe($("canvas"));
 function settingsChanged(){
   updateSettings();
