@@ -1,6 +1,6 @@
-const cacheName="vektora-converter-v21";
+const cacheName="vektora-converter-v22";
 const assets=[
-  "./","./converter.css?v=16","./converter.mjs?v=21","./icons.mjs","./trace-worker.mjs?v=20","./trace.mjs?v=20","./contours.mjs?v=18","./ink-contours.mjs?v=20","./formats.mjs?v=17","./sheet.mjs?v=17","./utilities.mjs?v=14","./image-codec.mjs?v=14","./tones.mjs?v=14","./resample-worker.mjs?v=14","./resample.mjs?v=14","./app.webmanifest?v=6","./pwa.mjs?v=1",
+  "./","./converter.css?v=16","./converter.mjs?v=22","./icons.mjs","./trace-worker.mjs?v=22","./trace.mjs?v=22","./contours.mjs?v=18","./ink-contours.mjs?v=20","./formats.mjs?v=22","./sheet.mjs?v=17","./utilities.mjs?v=14","./image-codec.mjs?v=14","./tones.mjs?v=14","./shading-mesh.mjs?v=1","./resample-worker.mjs?v=14","./resample.mjs?v=14","./app.webmanifest?v=6","./pwa.mjs?v=1",
   "./editor.html","./style.css?v=8","./editor.mjs?v=7","./assets/vektora-192.png","./assets/vektora-512.png","./assets/vektora-apple-180.png","./assets/vektora-maskable-512.png","./assets/botanika.jpg"
 ];
 self.addEventListener("install",event=>{

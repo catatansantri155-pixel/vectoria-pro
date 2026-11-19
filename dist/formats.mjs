@@ -37,6 +37,28 @@ function exactPaths(layers,crop,outlines){
   return shapes.join("");
 }
 
+function meshArt(model){
+  const {mesh,w,h}=model;
+  const definitions=[],art=[];
+  mesh.forEach(({y,stops},i)=>{
+    const colors=stops.map(([x,color])=>`<stop offset="${round(x)}" stop-color="${color}"/>`).join("");
+    definitions.push(`<linearGradient id="shade${i}">${colors}</linearGradient>`);
+    if(i===0){
+      art.push(`<rect width="${w}" height="${h}" fill="url(#shade0)"/>`);
+      return;
+    }
+    // Each row fades in over the previous row and stays opaque past the next boundary.
+    const top=round(mesh[i-1].y),bottom=Math.min(h,(mesh[i+1]?.y??h)+2);
+    const height=round(bottom-top);
+    definitions.push(
+      `<linearGradient id="mix${i}" gradientUnits="userSpaceOnUse" x1="0" x2="0" y1="${top}" y2="${round(y)}"><stop stop-color="black"/><stop offset="1" stop-color="white"/></linearGradient>`,
+      `<mask id="fade${i}" maskUnits="userSpaceOnUse" x="0" y="${top}" width="${w}" height="${height}"><rect y="${top}" width="${w}" height="${height}" fill="url(#mix${i})"/></mask>`
+    );
+    art.push(`<rect y="${top}" width="${w}" height="${height}" fill="url(#shade${i})" mask="url(#fade${i})"/>`);
+  });
+  return {definitions,art:`<g color-interpolation="sRGB">${art.join("")}</g>`};
+}
+
 export function svgText(model,options={}){
   const {w,h,layers}=model;
   const crop=options.crop??{x:0,y:0,w,h};
@@ -47,7 +69,8 @@ export function svgText(model,options={}){
   const backgroundFill=options.background==="white"?"#ffffff":
     options.background==="transparent"||options.outlines?null:model.backgroundFill;
   const background=backgroundFill?`<rect width="${crop.w}" height="${crop.h}" fill="${backgroundFill}"/>`:"";
-  const gradients=[],shapes=[];
+  const fading=model.mesh?meshArt(model):null;
+  const gradients=fading?.definitions??[],shapes=[];
   for(const {fill,rings,paths:geometry,regions} of model.exact?[]:layers){
     const groups=new Map();
     for(const [i,ring] of rings.entries()){
@@ -70,7 +93,7 @@ export function svgText(model,options={}){
   }
   const clip=options.crop?`<clipPath id="tile"><rect width="${crop.w}" height="${crop.h}"/></clipPath>`:"";
   const definitions=clip||gradients.length?`<defs>${clip}${gradients.join("")}</defs>`:"";
-  const art=model.exact?exactPaths(layers,crop,options.outlines):shapes.join("");
+  const art=fading?.art??(model.exact?exactPaths(layers,crop,options.outlines):shapes.join(""));
   const content=options.crop?`<g clip-path="url(#tile)"><g transform="translate(${-crop.x} ${-crop.y})">${art}</g></g>`:art;
   return `<svg xmlns="http://www.w3.org/2000/svg"${dim} viewBox="0 0 ${crop.w} ${crop.h}" fill-rule="evenodd"${model.exact&&!options.outlines?' shape-rendering="crispEdges"':""}>${definitions}${background}${content}</svg>`;
 }
@@ -81,6 +104,7 @@ function intersects(ring,crop) {
 }
 const rgb=fill=>[1,3,5].map(i=>round(parseInt(fill.slice(i,i+2),16)/255)).join(" ");
 function drawCommands(model,pdf){
+  if(model.mesh)throw Error("Gunakan SVG untuk menyimpan gradasi halus. Untuk EPS/PDF, pilih Logo dan ikon datar atau Siluet hitam-putih.");
   const cmd=[];
   if(model.backgroundFill){
     cmd.push(rgb(model.backgroundFill)+(pdf?" rg":" setrgbcolor"));

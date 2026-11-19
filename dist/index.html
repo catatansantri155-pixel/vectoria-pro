@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-title" content="Vektora">
 <script type="module" src="pwa.mjs?v=1"></script>
 <link rel="stylesheet" href="converter.css?v=16">
-<script type="module" src="converter.mjs?v=21"></script>
+<script type="module" src="converter.mjs?v=22"></script>
 </head>
 <body>
 <header class="header"><div class="header-inner">
@@ -51,9 +51,11 @@
         <label id="hdControl" class="quality-option"><input id="traceHD" type="checkbox" checked><span><strong>Trace HD</strong><small>Sampel lebih rapat untuk kontur yang lebih halus.</small></span></label>
         <label id="smoothControl" class="quality-option"><input id="smoothCurves" type="checkbox" checked><span><strong>Kurva halus</strong><small>Haluskan tepi dan rapatkan batas antarwarna.</small></span></label>
         <div id="monoControls" class="stack" hidden>
-          <label class="stack">Bagian yang dijadikan hitam<select id="monoPolarity"><option value="dark">Bagian gelap</option><option value="light">Bagian terang</option></select></label>
-          <label class="stack">Latar monokrom<select id="monoBackground"><option value="white">Putih</option><option value="transparent">Transparan</option></select></label>
-          <label class="check"><input id="monoAuto" type="checkbox" checked> Ambang otomatis</label>
+          <label class="stack">Tampilan monokrom<select id="monoStyle"><option value="auto">Otomatis</option><option value="tone">Gradasi abu-abu · 3D</option><option value="ink">Siluet hitam-putih</option></select></label>
+          <p id="monoToneHelp" class="setting-note" hidden>Mempertahankan volume, bayangan, dan latar dari gambar sumber tanpa transparansi.</p>
+          <label class="stack" id="monoPolarityControl">Bagian yang dijadikan hitam<select id="monoPolarity"><option value="dark">Bagian gelap</option><option value="light">Bagian terang</option></select></label>
+          <label class="stack" id="monoBackgroundControl">Latar monokrom<select id="monoBackground"><option value="white">Putih</option><option value="transparent">Transparan</option></select></label>
+          <label class="check" id="monoAutoControl"><input id="monoAuto" type="checkbox" checked> Ambang otomatis</label>
           <div id="thresholdControl" class="control" hidden><label for="threshold">Ambang monokrom</label><output id="thresholdOut" for="threshold">155</output><input id="threshold" type="range" min="1" max="255" value="155"></div>
         </div>
         <details id="advanced"><summary>Pengaturan lanjutan <span data-icon="chevron"></span></summary>
@@ -166,7 +168,7 @@
     <a class="nav-link editor-link" href="editor.html" data-icon="pencil">Editor</a>
   </nav>
 </div>
-<dialog id="guide"><div class="card-head"><h2>Panduan Vektora</h2><button class="icon" id="closeGuide" aria-label="Tutup panduan" data-icon="close"></button></div><p>Pilih gambar, atur detail dan warna, lalu ketuk <strong>Buat vektor</strong>. Logo, ikon, dan ilustrasi warna datar biasanya menghasilkan kontur yang paling bersih.</p><p>Mode monokrom mengubah piksel gelap menjadi satu warna. Untuk GIF, yang diproses adalah gambar yang didekode browser, biasanya frame pertama.</p><p>Unduh satu file SVG atau EPS untuk unggahan Adobe Stock. ZIP digunakan untuk mengambil banyak file sekaligus. Periksa detail dan hak penggunaan sebelum mengunggah.</p><p>Untuk membuka studio saat offline, jalankan situs sekali saat terhubung dan tunggu aset selesai disimpan di browser.</p></dialog>
+<dialog id="guide"><div class="card-head"><h2>Panduan Vektora</h2><button class="icon" id="closeGuide" aria-label="Tutup panduan" data-icon="close"></button></div><p>Pilih gambar, atur detail dan warna, lalu ketuk <strong>Buat vektor</strong>. Logo, ikon, dan ilustrasi warna datar biasanya menghasilkan kontur yang paling bersih.</p><p>Mode monokrom menyediakan gradasi abu-abu untuk ilustrasi 3D dan siluet hitam-putih. Untuk GIF, yang diproses adalah gambar yang didekode browser, biasanya frame pertama.</p><p>Unduh satu file SVG atau EPS untuk unggahan Adobe Stock. ZIP digunakan untuk mengambil banyak file sekaligus. Periksa detail dan hak penggunaan sebelum mengunggah.</p><p>Untuk membuka studio saat offline, jalankan situs sekali saat terhubung dan tunggu aset selesai disimpan di browser.</p></dialog>
 <div id="notice" role="alert" hidden></div>
 <dialog id="installHelp" aria-labelledby="installTitle">
   <div class="card-head"><h2 id="installTitle">Pasang Vektora Studio</h2></div>

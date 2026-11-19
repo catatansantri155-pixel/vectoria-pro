@@ -1,7 +1,8 @@
-import {epsText,outputSize,pdfText,rasterSize,svgText,traceSize,zipFiles} from "./formats.mjs?v=17";
+import {epsText,outputSize,pdfText,rasterSize,svgText,traceSize,zipFiles} from "./formats.mjs?v=22";
 import {setupUtilities} from "./utilities.mjs?v=14";
 import {loadImage,prepareImageFile} from "./image-codec.mjs?v=14";
 import {detectIcons,detectInkPaper,gridIcons,removeBorderColor} from "./sheet.mjs?v=17";
+import {canUseMesh,wantsSmoothShading} from "./shading-mesh.mjs?v=1";
 import {mountIcons} from "./icons.mjs";
 
 const $=id=>document.getElementById(id);
@@ -59,11 +60,12 @@ let previewAsset=null;
 const levels=[1,1.5,2,3,4,6,8];
 let panX=0,panY=0,pan=null;
 const current=()=>jobList[selected];
+const hasArtwork=result=>Boolean(result?.mesh||result?.layers.length);
 const label=id=>Number($(id).value);
 const settings=()=>({
   mode,colors:label("colors"),threshold:label("threshold"),detail:label("detail"),noise:label("noise"),
   removeWhite:$("removeWhite").checked,hd:$("traceHD").checked,smooth:$("smoothCurves").checked,
-  profile:$("traceProfile").value,monoBackground:$("monoBackground").value,monoAuto:$("monoAuto").checked,monoInvert:$("monoPolarity").value==="light"
+  profile:$("traceProfile").value,monoStyle:$("monoStyle").value,monoBackground:$("monoBackground").value,monoAuto:$("monoAuto").checked,monoInvert:$("monoPolarity").value==="light"
 });
 const exactMode=options=>options.mode==="color"&&options.profile==="exact";
 function sampleSize(w,h,options){
@@ -79,26 +81,29 @@ function updateSettings(){
   $("exactHelp").hidden=!exact;
   for(const id of ["detailControl","hdControl","smoothControl","advanced"])$(id).hidden=exact;
   $("colorControls").hidden=$("removeWhiteControl").hidden=mode!=="color";
-  $("thresholdControl").hidden=$("monoAuto").checked;
+  const tone=$("monoStyle").value==="tone";
+  for(const id of ["monoPolarityControl","monoBackgroundControl","monoAutoControl"])$(id).hidden=tone;
+  $("monoToneHelp").hidden=!tone;
+  $("thresholdControl").hidden=tone||$("monoAuto").checked;
   $("profileControl").hidden=mode!=="color";
   $("monoControls").hidden=mode!=="mono";
   document.querySelectorAll("[data-mode]").forEach(el=>el.setAttribute("aria-pressed",el.dataset.mode===mode));
 }
 function status(message){$("status").textContent=message;}
 function refreshButtons(){
-  const item=current(),has=Boolean(item?.result);
+  const item=current();
   $("run").disabled=processing||sheetBusy||!jobList.length;
   $("cancel").hidden=!processing;
   $("progressBox").hidden=!processing;
   $("run").lastChild.textContent=jobList.length>1?`Proses ${jobList.length} gambar`:"Buat vektor";
-  $("download").disabled=!has||!item.result.layers.length;
+  $("download").disabled=processing||sheetBusy||!hasArtwork(item?.result);
   $("slice").hidden=!item?.w;
   $("sliceScan").disabled=processing||sheetBusy;
   $("sliceDownload").disabled=processing||sheetBusy||!sheetPlan?.boxes.length;
   for(const id of ["sliceMethod","sliceFormat","sliceBackground","columns","rows"])$(id).disabled=sheetBusy;
   $("sliceCancel").hidden=!sheetBusy;
   $("sliceProgress").hidden=!sheetBusy;
-  $("batchDownload").disabled=processing||!jobList.some(entry=>entry.result?.layers.length);
+  $("batchDownload").disabled=processing||!jobList.some(entry=>hasArtwork(entry.result));
   $("zoomIn").disabled=zoom>=8||!item;
   $("zoomOut").disabled=zoom<=1||!item;
   $("zoomLevel").disabled=!item?.w;
@@ -156,7 +161,7 @@ function renderVector(model){
     previewAsset=null;
   }
   if(!model){container.replaceChildren();return;}
-  if(model.exact&&model.layers.length>10000){
+  if(model.mesh||(model.exact&&model.layers.length>10000)){
     const url=URL.createObjectURL(new Blob([svgText(model,{outlines})],{type:"image/svg+xml"}));
     const image=new Image();
     image.alt="";
@@ -168,6 +173,7 @@ function renderVector(model){
 function renderPreview(){
   const item=current(),result=item?.result;
   const ready=Boolean(item?.w);
+  if(result?.mesh&&view==="outline")view="result";
   $("canvas").dataset.view=result?view:"original";
   $("art").hidden=!ready;
   $("empty").hidden=ready;
@@ -186,14 +192,14 @@ function renderPreview(){
   }
   document.querySelectorAll("button[data-view]").forEach(button=>{
     button.setAttribute("aria-pressed",button.dataset.view===view);
-    button.disabled=!result;
+    button.disabled=!result||Boolean(result.mesh&&button.dataset.view==="outline");
   });
   $("fileInfo").hidden=!item;
   if(item){
     $("fileName").textContent=item.name;
     $("fileSize").textContent=ready?`${count(item.w)} × ${count(item.h)} px · ${item.size?sizeText(item.size):"Gambar contoh"}`:item.error??"Memuat…";
   }
-  if(!processing)status(item?.error??(result?(result.layers.length?(result.gradients?"Hasil gradasi vektor siap diperiksa dan diunduh.":"Hasil siap diperiksa dan diunduh."):"Hasil kosong. Atur ambang atau gunakan mode warna."):"Pilih gambar atau gunakan contoh."));
+  if(!processing)status(item?.error??(result?(hasArtwork(result)?((result.mesh||result.gradients)?"Hasil gradasi vektor siap diperiksa dan diunduh.":"Hasil siap diperiksa dan diunduh."):"Hasil kosong. Atur ambang atau gunakan mode warna."):"Pilih gambar atau gunakan contoh."));
   if(item&&!processing&&ready&&!result&&!item.error)status("Gambar siap. Ketuk Buat vektor.");
   updateDimensions();
   refreshButtons();
@@ -265,7 +271,7 @@ function addFiles(files){
 }
 function trace(pixels,w,h,options,progress){
   if(!worker){
-    worker=new Worker(new URL("./trace-worker.mjs?v=20",import.meta.url),{type:"module"});
+    worker=new Worker(new URL("./trace-worker.mjs?v=22",import.meta.url),{type:"module"});
     worker.onmessage=event=>{
       const {progress,error,result}=event.data;
       if(!pending)return;
@@ -303,9 +309,11 @@ async function convert(item,options,token,progress){
   let pixels;
   try{
     // Use native edges and color samples for ink on paper before upsampling can alter them.
-    if(options.mode==="color"&&(options.profile==="auto"||options.profile==="flat")&&width>item.w&&height>item.h){
+    if(width>item.w&&height>item.h){
       const native=sample(item.w,item.h);
-      if(detectInkPaper(native,item.w,item.h))pixels=native;
+      const inkPaper=options.mode==="color"&&["auto","flat"].includes(options.profile)&&detectInkPaper(native,item.w,item.h);
+      const mesh=wantsSmoothShading(native,item.w,item.h,options)&&canUseMesh(native,item.w,item.h);
+      if(inkPaper||mesh)pixels=native;
     }
     pixels??=sample(width,height);
   }finally{image.close?.();image=null;}
@@ -330,6 +338,7 @@ async function run({reveal=false}={}){
       const result=await convert(item,options,token,value=>{$("progress").value=(i+value)/scoped.length;});
       if(token!==serial)return;
       item.result=result;
+      item.resultSettings=options;
     }catch(error){
       if(token!==serial)return;
       item.error=error.message;
@@ -341,7 +350,7 @@ async function run({reveal=false}={}){
   processing=false;
   $("progress").value=1;
   renderPreview();
-  const finished=scoped.filter(item=>item.result?.layers.length).length;
+  const finished=scoped.filter(item=>hasArtwork(item.result)).length;
   if(scoped.length>1)status(`${finished} dari ${scoped.length} gambar menghasilkan vektor.`);
   if(reveal && studio==="vector" && matchMedia("(max-width:739px)").matches){
     $("previewTitle").scrollIntoView({block:"start",behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth"});
@@ -361,12 +370,34 @@ function changeZoom(value){
 }
 async function downloadResult(){
   const item=current(),model=item?.result,stock=$("stock").checked,format=$("format").value;
-  if(!model?.layers.length){notify("Hasil belum berisi bentuk. Ubah pengaturan lalu proses kembali.");return;}
+  if(processing||sheetBusy)return;
+  if(!hasArtwork(model)){notify("Hasil belum berisi bentuk. Ubah pengaturan lalu proses kembali.");return;}
   const base=fileName(item.name);
   try{
     if(format==="SVG")saveFile(base+".svg",svgText(model,{stock}),"image/svg+xml");
-    else if(format==="EPS")saveFile(base+".eps",epsText(model,stock,base),"application/postscript");
-    else if(format==="PDF")saveFile(base+".pdf",pdfText(model,stock),"application/pdf");
+    else if(format==="EPS"||format==="PDF"){
+      let contours=model;
+      if(model.mesh){
+        processing=true;
+        const token=++serial;
+        $("progress").value=0;
+        status(`Menyiapkan bidang warna untuk ${format}…`);
+        refreshButtons();
+        try{
+          contours=await convert(item,{...item.resultSettings,mode:"color",profile:"gradient",
+            contourOutput:true,removeWhite:false,contourGray:item.resultSettings.mode==="mono"},
+            token,value=>{$("progress").value=value;});
+          if(token!==serial)return;
+        }finally{
+          if(token===serial){
+            processing=false;
+            renderPreview();
+          }
+        }
+      }
+      if(format==="EPS")saveFile(base+".eps",epsText(contours,stock,base),"application/postscript");
+      else saveFile(base+".pdf",pdfText(contours,stock),"application/pdf");
+    }
     else {
       const [w,h]=rasterSize(model.originalWidth,model.originalHeight,$("rasterSize").value);
       const canvas=document.createElement("canvas");
@@ -381,11 +412,11 @@ async function downloadResult(){
         saveFile(base+"."+format.toLowerCase(),await rasterBlob(canvas,format));
       }finally{URL.revokeObjectURL(url);}
     }
-    notify(model.gradients&&["EPS","PDF"].includes(format)?`${format} diunduh dengan warna datar. Gunakan SVG untuk mempertahankan gradasi.`:`${format} siap diunduh.`);
-  }catch(error){notify(error.message);}
+    notify((model.mesh||model.gradients)&&["EPS","PDF"].includes(format)?`${format} diunduh dengan warna datar. Gunakan SVG untuk mempertahankan gradasi.`:`${format} siap diunduh.`);
+  }catch(error){if(error.name!=="AbortError")notify(error.message);}
 }
 function batchDownload(){
-  const files=jobList.filter(item=>item.result?.layers.length).map((item,i)=>({
+  const files=jobList.filter(item=>hasArtwork(item.result)).map((item,i)=>({
     name:`${String(i+1).padStart(2,"0")}-${fileName(item.name)}.svg`,
     text:svgText(item.result,{stock:$("stock").checked})
   }));
@@ -495,7 +526,7 @@ async function sliceDownload(){
       if(outputBackground!=="source"&&!isolatedPaper)removeBorderColor(raw,canvas.width,canvas.height,background,exactMode(config)?0:24);
       const model=await trace(raw,canvas.width,canvas.height,config,()=>{});
       if(request!==sheetRequest)return;
-      if(!model.layers.length){
+      if(!hasArtwork(model)){
         if(method==="grid")continue;
         throw Error(`Ikon ${index} kosong setelah diproses. Periksa kisi atau coba dengan latar polos tetap ditampilkan.`);
       }
@@ -588,7 +619,7 @@ function settingsChanged(){
   updateSettings();
   if(current()?.result&&!processing)status("Pengaturan berubah. Ketuk Buat vektor untuk memperbarui hasil.");
 }
-for(const id of ["detail","colors","threshold","noise","removeWhite","traceHD","smoothCurves","traceProfile","monoAuto","monoPolarity","monoBackground"])$(id).oninput=settingsChanged;
+for(const id of ["detail","colors","threshold","noise","removeWhite","traceHD","smoothCurves","traceProfile","monoStyle","monoAuto","monoPolarity","monoBackground"])$(id).oninput=settingsChanged;
 document.querySelectorAll("[data-mode]").forEach(button=>button.onclick=()=>{mode=button.dataset.mode;settingsChanged();});
 document.querySelectorAll("button[data-view]").forEach(button=>button.onclick=()=>switchView(button.dataset.view));
 $("help").onclick=()=>$("guide").showModal();

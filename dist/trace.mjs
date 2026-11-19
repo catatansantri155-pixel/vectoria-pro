@@ -1,3 +1,4 @@
+import {canUseMesh,shadingMesh,wantsSmoothShading} from "./shading-mesh.mjs?v=1";
 import {isoRings,reinforceInkStrokes,roundInkJoins,steadyInkRing} from "./ink-contours.mjs?v=20";
 import {fitRegionTones,hasShading,smoothTonePixels} from "./tones.mjs?v=14";
 import {sharedContours} from "./contours.mjs?v=18";
@@ -420,11 +421,18 @@ export function vectorize(pixels,w,h,settings,progress=()=>{}) {
   }
   const paper=isolatedPaper??(!monochrome&&(settings.profile==="auto"||settings.profile==="flat")?detectInkPaper(pixels,w,h):null);
   if(!monochrome&&paper)return traceInk(pixels,w,h,settings,paper,!settings.removeWhite&&!isolatedPaper,progress);
+  if(wantsSmoothShading(pixels,w,h,settings)){
+    if(canUseMesh(pixels,w,h))return shadingMesh(pixels,w,h,{detail:settings.detail,gray:monochrome},progress);
+    if(monochrome&&settings.monoStyle==="tone")throw Error("Gradasi abu-abu memerlukan gambar tanpa transparansi. Gunakan JPG atau pilih Siluet hitam-putih.");
+  }
   if(monochrome){
     const threshold=settings.monoAuto?monoThreshold(pixels):settings.threshold;
     const model=traceMonoLayer(pixels,w,h,settings,threshold,Boolean(settings.monoInvert),[0,0,0],Math.max(0,settings.noise-2),progress,settings.monoAuto);
     if(settings.monoBackground==="white")model.backgroundFill="#ffffff";
     return model;
+  }
+  if(settings.contourGray){
+    for(let i=0;i<pixels.length;i+=4)pixels[i]=pixels[i+1]=pixels[i+2]=luminance(pixels,i);
   }
   if(settings.removeWhite)dropWhite(pixels,w,h);
   progress(.17);
