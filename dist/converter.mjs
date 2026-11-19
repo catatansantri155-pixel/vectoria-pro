@@ -1,4 +1,4 @@
-import {epsText,outputSize,pdfText,rasterSize,svgText,traceSize,zipFiles} from "./formats.mjs?v=7";
+import {epsText,outputSize,pdfText,rasterSize,svgText,traceSize,zipFiles} from "./formats.mjs?v=8";
 import {setupUtilities} from "./utilities.mjs";
 import {mountIcons} from "./icons.mjs";
 
@@ -62,7 +62,7 @@ let jobList=[],selected=0,studio="vector",mode="color",view="compare",zoom=1,ser
 let worker=null,pending=null,processing=false,previewUrl;
 const current=()=>jobList[selected];
 const label=id=>Number($(id).value);
-const settings=()=>({mode,colors:label("colors"),threshold:label("threshold"),detail:label("detail"),noise:label("noise"),removeWhite:$("removeWhite").checked,hd:$("traceHD").checked});
+const settings=()=>({mode,colors:label("colors"),threshold:label("threshold"),detail:label("detail"),noise:label("noise"),removeWhite:$("removeWhite").checked,hd:$("traceHD").checked,smooth:$("smoothCurves").checked});
 const detailNames=["Sederhana","Ringan","Seimbang","Detail tinggi","Sangat detail"];
 function updateSettings(){
   for(const key of ["colors","threshold","noise"])$(key+"Out").textContent=$(key).value;
@@ -100,9 +100,8 @@ function sizeArtwork(){
   const height=width*item.h/item.w;
   const split=label("compareRange")/100;
   canvas.style.setProperty("--split",split*100+"%");
-  canvas.style.setProperty("--art-width",width+"px");
-  canvas.style.setProperty("--art-height",height+"px");
-  canvas.style.setProperty("--zoom",zoom);
+  canvas.style.setProperty("--art-width",width*zoom+"px");
+  canvas.style.setProperty("--art-height",height*zoom+"px");
   canvas.style.setProperty("--image-split",((split-.5)*canvas.clientWidth/(width*zoom)+.5)*100+"%");
   $("zoomReset").textContent=zoom*100+"%";
 }
@@ -210,7 +209,7 @@ function addFiles(files){
 }
 function trace(pixels,w,h,options,progress){
   if(!worker){
-    worker=new Worker(new URL("./trace-worker.mjs",import.meta.url),{type:"module"});
+    worker=new Worker(new URL("./trace-worker.mjs?v=8",import.meta.url),{type:"module"});
     worker.onmessage=event=>{
       const {progress,error,result}=event.data;
       if(!pending)return;
@@ -306,7 +305,7 @@ async function downloadResult(){
       canvas.width=w;canvas.height=h;
       const context=canvas.getContext("2d");
       if(format==="JPG"){context.fillStyle="#ffffff";context.fillRect(0,0,w,h);}
-      const url=URL.createObjectURL(new Blob([svgText(model)],{type:"image/svg+xml"}));
+      const url=URL.createObjectURL(new Blob([svgText(model,{dimensions:[w,h]})],{type:"image/svg+xml"}));
       try{
         const image=await loadImage(url);
         context.imageSmoothingQuality="high";
@@ -377,7 +376,7 @@ function settingsChanged(){
   updateSettings();
   if(current()?.result&&!processing)status("Pengaturan berubah. Ketuk Buat vektor untuk memperbarui hasil.");
 }
-for(const id of ["detail","colors","threshold","noise","removeWhite","traceHD"])$(id).oninput=settingsChanged;
+for(const id of ["detail","colors","threshold","noise","removeWhite","traceHD","smoothCurves"])$(id).oninput=settingsChanged;
 document.querySelectorAll("[data-mode]").forEach(button=>button.onclick=()=>{mode=button.dataset.mode;settingsChanged();});
 document.querySelectorAll("button[data-view]").forEach(button=>button.onclick=()=>switchView(button.dataset.view));
 $("help").onclick=()=>$("guide").showModal();

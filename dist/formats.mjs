@@ -17,18 +17,49 @@ export function traceSize(w,h,detail,hd){
   const scale = Math.min(hd?2:1,edgeLimit/Math.max(w,h),Math.sqrt(4.5e6/(w*h)));
   return [Math.max(1,Math.floor(w*scale)),Math.max(1,Math.floor(h*scale))];
 }
-const sequence=ring=>"M"+ring.map(([x,y])=>x+" "+y).join("L")+"Z";
+const coords=values=>values.map(round).join(" ");
+
+function contourCommands(ring,smooth){
+  const straight=()=>ring.map((point,index)=>[index?"L":"M",point]);
+  if(!smooth||ring.length<5)return straight();
+
+  const corners=ring.map(([x,y],index)=>{
+    const prev=ring[(index+ring.length-1)%ring.length];
+    const next=ring[(index+1)%ring.length];
+    const point=[x,y];
+    const incoming=[x-prev[0],y-prev[1]], outgoing=[next[0]-x,next[1]-y];
+    const a=Math.hypot(...incoming),b=Math.hypot(...outgoing);
+    const cosine=(incoming[0]*outgoing[0]+incoming[1]*outgoing[1])/(a*b);
+    // Keep intentional corners such as the junctions of letters and rectangles.
+    if(!a||!b||cosine<.60||cosine>.99995)return {entry:point};
+    const trim=Math.min(a,b)*.46;
+    const entry=[x-trim*incoming[0]/a,y-trim*incoming[1]/a];
+    const exit=[x+trim*outgoing[0]/b,y+trim*outgoing[1]/b];
+    // Convert a rounded quadratic join into a cubic for SVG, PDF, and EPS.
+    const first=[(entry[0]+2*x)/3,(entry[1]+2*y)/3];
+    const second=[(exit[0]+2*x)/3,(exit[1]+2*y)/3];
+    return {entry,curve:[...first,...second,...exit]};
+  });
+  const commands=[];
+  for(const [index,{entry,curve}] of corners.entries()){
+    commands.push([index?"L":"M",entry]);
+    if(curve)commands.push(["C",curve]);
+  }
+  return commands;
+}
+const seamStroke=model=>model.smooth?1.8:.36;
+const sequence=(ring,smooth)=>contourCommands(ring,smooth).map(([op,points])=>op+coords(points)).join("")+"Z";
 export function svgText(model,options={}){
   const {w,h,layers}=model;
   const crop=options.crop??{x:0,y:0,w,h};
-  const [width,height]=options.crop
+  const [width,height]=options.dimensions ?? (options.crop
     ? outputSize(Math.round(crop.w),Math.round(crop.h),options.stock)
-    : outputSize(model.originalWidth??w,model.originalHeight??h,options.stock);
+    : outputSize(model.originalWidth??w,model.originalHeight??h,options.stock));
   const dim=options.preview ? "" : ` width="${width}" height="${height}"`;
   const shapes=layers.map(({fill,rings})=>{
-    const paths=rings.filter(ring=>!options.crop||intersects(ring,crop)).map(sequence).join("");
+    const paths=rings.filter(ring=>!options.crop||intersects(ring,crop)).map(ring=>sequence(ring,model.smooth)).join("");
     if(!paths)return "";
-    const paint=options.outlines ? `fill="none" stroke="${fill}" stroke-width="${round(Math.max(w,h)/545)}"` : `fill="${fill}" stroke="${fill}" stroke-width="0.36" stroke-linejoin="round"`;
+    const paint=options.outlines ? `fill="none" stroke="${fill}" stroke-width="${round(Math.max(w,h)/545)}"` : `fill="${fill}" stroke="${fill}" stroke-width="${seamStroke(model)}" stroke-linejoin="round"`;
     return `<path ${paint} d="${paths}"/>`;
   }).join("");
   const content=options.crop
@@ -42,15 +73,18 @@ function intersects(ring,crop) {
   return left<crop.x+crop.w&&right>crop.x&&top<crop.y+crop.h&&bottom>crop.y;
 }
 const rgb=fill=>[1,3,5].map(i=>round(parseInt(fill.slice(i,i+2),16)/255)).join(" ");
-function drawCommands(layers,pdf){
+function drawCommands(model,pdf){
   const cmd=[];
-  for(const {fill,rings} of layers){
-    cmd.push(rgb(fill)+(pdf?" rg":" setrgbcolor\nnewpath"));
+  const operations=pdf?{M:"m",L:"l",C:"c"}:{M:"moveto",L:"lineto",C:"curveto"};
+  for(const {fill,rings} of model.layers){
+    const color=rgb(fill);
+    if(pdf)cmd.push(color+" rg",color+" RG",seamStroke(model)+" w","1 j");
+    else cmd.push(color+" setrgbcolor",seamStroke(model)+" setlinewidth","1 setlinejoin","newpath");
     for(const ring of rings){
-      for(let i=0;i<ring.length;i++) cmd.push(ring[i].join(" ")+(pdf?(i?" l":" m"):(i?" lineto":" moveto")));
+      for(const [op,points] of contourCommands(ring,model.smooth)) cmd.push(coords(points)+" "+operations[op]);
       cmd.push(pdf?"h":"closepath");
     }
-    cmd.push(pdf?"f*":"eofill");
+    cmd.push(pdf?"B*":"gsave eofill grestore stroke");
   }
   return cmd.join("\n");
 }
@@ -68,14 +102,14 @@ export function epsText(model,stock,name){
 gsave
 0 ${h} translate
 ${round(w/model.w)} ${round(-h/model.h)} scale
-${drawCommands(model.layers,false)}
+${drawCommands(model,false)}
 grestore
 %%EOF
 `;
 }
 export function pdfText(model,stock){
   const [w,h]=outputSize(model.originalWidth??model.w,model.originalHeight??model.h,stock);
-  const stream=`q\n${round(w/model.w)} 0 0 ${round(-h/model.h)} 0 ${h} cm\n${drawCommands(model.layers,true)}\nQ\n`;
+  const stream=`q\n${round(w/model.w)} 0 0 ${round(-h/model.h)} 0 ${h} cm\n${drawCommands(model,true)}\nQ\n`;
   const objects=[
     "<< /Type /Catalog /Pages 2 0 R >>",
     "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",

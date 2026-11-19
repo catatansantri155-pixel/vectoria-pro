@@ -9,8 +9,8 @@
 <title>Vektora Studio — Konverter gambar ke vektor</title>
 <link rel="icon" href="assets/mark.svg?v=5" type="image/svg+xml">
 <link rel="manifest" href="app.webmanifest?v=5">
-<link rel="stylesheet" href="converter.css?v=7">
-<script type="module" src="converter.mjs?v=7"></script>
+<link rel="stylesheet" href="converter.css?v=8">
+<script type="module" src="converter.mjs?v=8"></script>
 </head>
 <body>
 <header class="header"><div class="header-inner">
@@ -41,6 +41,7 @@
         <div class="segment mode" aria-label="Mode warna"><button type="button" data-mode="color" aria-pressed="true" data-icon="palette">Warna</button><button type="button" data-mode="mono" aria-pressed="false" data-icon="contrast">Monokrom</button></div>
         <div class="control"><label for="detail">Detail bentuk</label><output id="detailOut" for="detail">Seimbang</output><input id="detail" type="range" min="0" max="4" value="2"><div class="range-ends"><span>Sederhana</span><span>Sangat detail</span></div></div>
         <label class="quality-option"><input id="traceHD" type="checkbox" checked><span><strong>Trace HD</strong><small>Sampel lebih rapat untuk kontur yang lebih halus.</small></span></label>
+        <label class="quality-option"><input id="smoothCurves" type="checkbox" checked><span><strong>Kurva halus</strong><small>Haluskan tepi melengkung dan pertahankan sudut tegas.</small></span></label>
         <details id="advanced"><summary>Pengaturan lanjutan <span data-icon="chevron"></span></summary>
           <div id="colorControls" class="control"><label for="colors">Maksimum warna</label><output id="colorsOut" for="colors">12</output><input id="colors" type="range" min="2" max="32" value="12"></div>
           <div id="monoControls" class="control" hidden><label for="threshold">Ambang monokrom</label><output id="thresholdOut" for="threshold">155</output><input id="threshold" type="range" min="20" max="250" value="155"></div>

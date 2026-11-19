@@ -167,7 +167,7 @@ function simplify(points,tolerance) {
   const result=points.filter((_,i)=>keep[i]);
   return result.length>=3?result:points;
 }
-function traceEdges(labels,w,h,colors,detail,progress) {
+function traceEdges(labels,w,h,colors,detail,smooth,hd,progress) {
   const edges=new Uint8Array(labels.length);
   for(let i=0;i<labels.length;i++){
     const label=labels[i],x=i%w;
@@ -178,7 +178,9 @@ function traceEdges(labels,w,h,colors,detail,progress) {
     if(!x||labels[i-1]!==label)edges[i]|=8;
   }
   const layers=colors.map(color=>({fill:hex(color),rings:[]}));
-  const tolerance=[1.65,1.15,.72,.50,.31][detail];
+  const detailTolerance=[1.65,1.15,.72,.50,.31][detail];
+  // Upsampled pixels make stair steps wider without adding real edge detail.
+  const curveTolerance=[3.1,2.7,2.3,1.95,1.65][detail]*(hd?1.5:1);
   let pointsTotal=0,contours=0,objects=0;
   for(let i=0;i<edges.length;i++){
     if(i%Math.max(w,Math.floor(h/8)*w)===0)progress(.56+.40*i/edges.length);
@@ -205,6 +207,9 @@ function traceEdges(labels,w,h,colors,detail,progress) {
         index=next;
       }
       if(!closed||vertices.length<3||area===0)continue;
+      const tolerance=smooth
+        ? Math.max(.8,Math.min(curveTolerance,Math.sqrt(Math.abs(area)/2)/13))
+        : detailTolerance;
       const ring=simplify(vertices,tolerance);
       pointsTotal+=ring.length;
       if(pointsTotal>360000)throw Error("Gambar terlalu kompleks. Kurangi warna atau detail, atau naikkan pembersihan bintik.");
@@ -213,7 +218,7 @@ function traceEdges(labels,w,h,colors,detail,progress) {
       contours++;
     }
   }
-  return {layers:layers.filter(layer=>layer.rings.length),points:pointsTotal,contours,objects,w,h};
+  return {layers:layers.filter(layer=>layer.rings.length),points:pointsTotal,contours,objects,w,h,smooth};
 }
 export function vectorize(pixels,w,h,settings,progress=()=>{}) {
   if(settings.removeWhite) dropWhite(pixels,w,h);
@@ -223,5 +228,5 @@ export function vectorize(pixels,w,h,settings,progress=()=>{}) {
   progress(.35);
   const labels=classify(pixels,colors,monochrome?settings.threshold:null);
   progress(.54);
-  return traceEdges(removeSpecks(labels,w,h,settings.noise,colors.length),w,h,colors,settings.detail,progress);
+  return traceEdges(removeSpecks(labels,w,h,settings.noise,colors.length),w,h,colors,settings.detail,settings.smooth!==false,settings.hd,progress);
 }
