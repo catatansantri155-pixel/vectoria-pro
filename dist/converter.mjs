@@ -1,8 +1,6 @@
-import {epsText,outputSize,pdfText,rasterSize,svgText,traceSize,zipFiles} from "./formats.mjs?v=22";
-import {setupUtilities} from "./utilities.mjs?v=14";
+import {epsText,outputSize,pdfText,rasterSize,svgStart,svgText,traceSize,zipFiles} from "./formats.mjs?v=24";
 import {loadImage,prepareImageFile} from "./image-codec.mjs?v=14";
 import {detectIcons,detectInkPaper,gridIcons,removeBorderColor} from "./sheet.mjs?v=17";
-import {canUseMesh,wantsSmoothShading} from "./shading-mesh.mjs?v=2";
 import {mountIcons} from "./icons.mjs";
 
 const $=id=>document.getElementById(id);
@@ -54,11 +52,11 @@ function rasterBlob(canvas,format){
 }
 
 let jobList=[],selected=0,studio="vector",mode="color",view="compare",zoom=1,serial=0;
-let worker=null,pending=null,processing=false;
+let worker=null,pending=null,processing=false,workerIdle;
 let sheetPlan=null,sheetBusy=false,sheetRequest=0;
-let previewAsset=null;
+let previewAsset=null,activeSVG=null,utilityLoader;
 const levels=[1,1.5,2,3,4,6,8];
-let panX=0,panY=0,pan=null;
+let panX=0,panY=0,pan=null,artFrame=0;
 const current=()=>jobList[selected];
 const hasArtwork=result=>Boolean(result?.mesh||result?.layers.length);
 const label=id=>Number($(id).value);
@@ -119,22 +117,31 @@ function updateQueue(){
 function sizeArtwork(){
   const canvas=$("canvas");
   const item=current();
-  if(!item?.w||!item?.h||!canvas.clientWidth)return;
-  const width=Math.min(canvas.clientWidth,canvas.clientHeight*item.w/item.h);
+  if(!item?.w||!item?.h)return;
+  const cw=canvas.clientWidth,ch=canvas.clientHeight;
+  if(!cw)return;
+  const width=Math.min(cw,ch*item.w/item.h);
   const height=width*item.h/item.w;
   const split=label("compareRange")/100;
   canvas.style.setProperty("--split",split*100+"%");
   canvas.style.setProperty("--art-width",width*zoom+"px");
   canvas.style.setProperty("--art-height",height*zoom+"px");
-  canvas.style.setProperty("--image-split",((split-.5)*canvas.clientWidth/(width*zoom)+.5)*100+"%");
-  const limitX=Math.max(0,(width*zoom-canvas.clientWidth)/2);
-  const limitY=Math.max(0,(height*zoom-canvas.clientHeight)/2);
+  canvas.style.setProperty("--image-split",((split-.5)*cw/(width*zoom)+.5)*100+"%");
+  const limitX=Math.max(0,(width*zoom-cw)/2);
+  const limitY=Math.max(0,(height*zoom-ch)/2);
   panX=Math.max(-limitX,Math.min(limitX,panX));
   panY=Math.max(-limitY,Math.min(limitY,panY));
   canvas.style.setProperty("--pan-x",panX+"px");
   canvas.style.setProperty("--pan-y",panY+"px");
   canvas.dataset.pan=String(canvas.dataset.view!=="compare"&&zoom>1);
   $("zoomLevel").value=String(zoom);
+}
+function scheduleArtwork(){
+  if(artFrame)return;
+  artFrame=requestAnimationFrame(()=>{
+    artFrame=0;
+    sizeArtwork();
+  });
 }
 function updateDimensions(){
   const item=current();
@@ -153,22 +160,31 @@ function updateDimensions(){
   const [w,h]=outputSize(item.w,item.h,$("stock").checked);
   $("dimensions").textContent=`${count(w)} × ${count(h)} px · ${(w*h/1e6).toLocaleString("id-ID",{maximumFractionDigits:2})} MP`;
 }
+function resultSVG(model,{stock,dimensions}={}){
+  if(activeSVG?.model!==model){
+    const markup=svgText(model,{preview:true});
+    activeSVG={model,body:new Blob([markup.slice(svgStart.length)])};
+  }
+  const [width,height]=dimensions??outputSize(model.originalWidth??model.w,model.originalHeight??model.h,stock);
+  return new Blob([`${svgStart} width="${width}" height="${height}"`,activeSVG.body],{type:"image/svg+xml"});
+}
 function renderVector(model){
   const container=$("result"),outlines=view==="outline";
   if(previewAsset){
     if(previewAsset.model===model&&previewAsset.outlines===outlines)return;
-    URL.revokeObjectURL(previewAsset.url);
+    if(previewAsset.url)URL.revokeObjectURL(previewAsset.url);
     previewAsset=null;
   }
+  if(activeSVG?.model!==model)activeSVG=null;
   if(!model){container.replaceChildren();return;}
-  if(model.mesh||(model.exact&&model.layers.length>10000)){
-    const url=URL.createObjectURL(new Blob([svgText(model,{outlines})],{type:"image/svg+xml"}));
-    const image=new Image();
-    image.alt="";
-    image.src=url;
-    container.replaceChildren(image);
-    previewAsset={model,outlines,url};
-  }else container.innerHTML=svgText(model,{preview:true,outlines});
+  const svg=outlines?new Blob([svgText(model,{outlines:true})],{type:"image/svg+xml"}):resultSVG(model);
+  const url=URL.createObjectURL(svg);
+  const image=new Image();
+  image.alt="";
+  image.decoding="async";
+  image.src=url;
+  container.replaceChildren(image);
+  previewAsset={model,outlines,url};
 }
 function renderPreview(){
   const item=current(),result=item?.result;
@@ -177,7 +193,9 @@ function renderPreview(){
   $("canvas").dataset.view=result?view:"original";
   $("art").hidden=!ready;
   $("empty").hidden=ready;
-  $("original").src=ready?item.url:sampleUrl;
+  const original=$("original");
+  if(ready&&original.getAttribute("src")!==item.url)original.src=item.url;
+  else if(!ready)original.removeAttribute("src");
   $("sourceLabel").hidden=!ready||Boolean(result&&view!=="compare");
   $("vectorLabel").hidden=!result;
   $("vectorLabel").textContent=view==="outline"?"Kontur":"Vektor";
@@ -188,7 +206,7 @@ function renderPreview(){
   if(result){
     $("objects").textContent=count(result.objects);
     $("points").textContent=count(result.points);
-    $("svgSize").textContent=sizeText(new Blob([svgText(result,{stock:$("stock").checked})]).size);
+    $("svgSize").textContent=sizeText(resultSVG(result,{stock:$("stock").checked}).size);
   }
   document.querySelectorAll("button[data-view]").forEach(button=>{
     button.setAttribute("aria-pressed",button.dataset.view===view);
@@ -237,6 +255,7 @@ async function selectItem(index){
   if(current()===item){updateQueue();renderPreview();}
 }
 function stopProcessing(){
+  clearTimeout(workerIdle);
   serial+=1;
   worker?.terminate();
   worker=null;
@@ -270,14 +289,19 @@ function addFiles(files){
   if(accepted.length)replaceItems(accepted);
 }
 function trace(pixels,w,h,options,progress){
+  clearTimeout(workerIdle);
   if(!worker){
-    worker=new Worker(new URL("./trace-worker.mjs?v=23",import.meta.url),{type:"module"});
+    worker=new Worker(new URL("./trace-worker.mjs?v=24",import.meta.url),{type:"module"});
     worker.onmessage=event=>{
       const {progress,error,result}=event.data;
       if(!pending)return;
       if(progress!==undefined){pending.progress(progress);return;}
       const job=pending;
       pending=null;
+      workerIdle=setTimeout(()=>{
+        worker?.terminate();
+        worker=null;
+      },20000);
       if(error)job.reject(Error(error));
       else job.resolve(result);
     };
@@ -310,6 +334,8 @@ async function convert(item,options,token,progress){
   try{
     // Use native edges and color samples for ink on paper before upsampling can alter them.
     if(width>item.w&&height>item.h){
+      const {canUseMesh,wantsSmoothShading}=await import("./shading-mesh.mjs?v=3");
+      if(token!==serial)throw new DOMException("Dibatalkan","AbortError");
       const native=sample(item.w,item.h);
       const inkPaper=options.mode==="color"&&["auto","flat"].includes(options.profile)&&detectInkPaper(native,item.w,item.h);
       const mesh=wantsSmoothShading(native,item.w,item.h,options)&&canUseMesh(native,item.w,item.h);
@@ -317,7 +343,9 @@ async function convert(item,options,token,progress){
     }
     pixels??=sample(width,height);
   }finally{image.close?.();image=null;}
-  const result=await trace(pixels,canvas.width,canvas.height,options,progress);
+  const sampledWidth=canvas.width,sampledHeight=canvas.height;
+  canvas.width=canvas.height=0;
+  const result=await trace(pixels,sampledWidth,sampledHeight,options,progress);
   result.originalWidth=item.w;
   result.originalHeight=item.h;
   return result;
@@ -374,7 +402,13 @@ async function downloadResult(){
   if(!hasArtwork(model)){notify("Hasil belum berisi bentuk. Ubah pengaturan lalu proses kembali.");return;}
   const base=fileName(item.name);
   try{
-    if(format==="SVG")saveFile(base+".svg",svgText(model,{stock}),"image/svg+xml");
+    if(format==="SVG")saveFile(base+".svg",resultSVG(model,{stock}));
+    else if(format==="SVG ZIP"){
+      const blob=resultSVG(model,{stock});
+      const zip=await zipFiles([{name:base+".svg",blob}]);
+      if(!jobList.includes(item)||item.result!==model)return;
+      saveFile(base+"-svg.zip",zip);
+    }
     else if(format==="EPS"||format==="PDF"){
       let contours=model;
       if(model.mesh){
@@ -404,23 +438,31 @@ async function downloadResult(){
       canvas.width=w;canvas.height=h;
       const context=canvas.getContext("2d");
       if(format==="JPG"){context.fillStyle="#ffffff";context.fillRect(0,0,w,h);}
-      const url=URL.createObjectURL(new Blob([svgText(model,{dimensions:[w,h]})],{type:"image/svg+xml"}));
+      const url=URL.createObjectURL(resultSVG(model,{dimensions:[w,h]}));
       try{
         const image=await loadImage(url,{exporting:true});
         context.imageSmoothingQuality="high";
         context.drawImage(image,0,0,w,h);
         saveFile(base+"."+format.toLowerCase(),await rasterBlob(canvas,format));
-      }finally{URL.revokeObjectURL(url);}
+      }finally{URL.revokeObjectURL(url);canvas.width=canvas.height=0;}
     }
     notify((model.mesh||model.gradients)&&["EPS","PDF"].includes(format)?`${format} diunduh dengan warna datar. Gunakan SVG untuk mempertahankan gradasi.`:`${format} siap diunduh.`);
   }catch(error){if(error.name!=="AbortError")notify(error.message);}
 }
-function batchDownload(){
-  const files=jobList.filter(item=>hasArtwork(item.result)).map((item,i)=>({
-    name:`${String(i+1).padStart(2,"0")}-${fileName(item.name)}.svg`,
-    text:svgText(item.result,{stock:$("stock").checked})
-  }));
-  if(files.length)saveFile("vektora-batch.zip",zipFiles(files));
+async function batchDownload(){
+  const items=jobList.filter(item=>hasArtwork(item.result));
+  const queue=jobList,stock=$("stock").checked;
+  if(!items.length)return;
+  const results=items.map(({result,name})=>({result,name}));
+  function* files(){
+    for(const [index,{result,name}] of results.entries()){
+      yield {name:`${String(index+1).padStart(2,"0")}-${fileName(name)}.svg`,text:svgText(result,{stock})};
+    }
+  }
+  try{
+    const zip=await zipFiles(files());
+    if(jobList===queue&&results.every(({result},i)=>items[i].result===result))saveFile("vektora-batch.zip",zip);
+  }catch(error){notify(error.message);}
 }
 function renderSheetBoxes(){
   const overlay=$("sliceOverlay"),show=Boolean(sheetPlan&&$("sliceShowBoxes").checked&&$("slice").open);
@@ -546,7 +588,9 @@ async function sliceDownload(){
     }
     if(request!==sheetRequest)return;
     if(!files.length)throw Error("Tidak ada ikon yang dapat diunduh.");
-    saveFile(base+"-ikon.zip",zipFiles(files));
+    const archive=await zipFiles(files);
+    if(request!==sheetRequest)return;
+    saveFile(base+"-ikon.zip",archive);
     const backgroundLabel={transparent:"transparan",white:"putih",source:"sumber"}[outputBackground];
     const backgroundNote=outputBackground!=="source"&&!background?" Latar polos dari sumber tidak terdeteksi.":"";
     setSheetMessage(`${count(files.length)} file ${format} dengan latar ${backgroundLabel} dimasukkan ke ZIP.${backgroundNote}`);
@@ -597,9 +641,9 @@ $("rows").oninput=$("columns").oninput=resetSheet;
 $("format").onchange=$("rasterSize").onchange=updateDimensions;
 $("stock").onchange=()=>{
   updateDimensions();
-  if(current()?.result)$("svgSize").textContent=sizeText(new Blob([svgText(current().result,{stock:$("stock").checked})]).size);
+  if(current()?.result)$("svgSize").textContent=sizeText(resultSVG(current().result,{stock:$("stock").checked}).size);
 };
-$("compareRange").oninput=sizeArtwork;
+$("compareRange").oninput=scheduleArtwork;
 $("zoomIn").onclick=()=>changeZoom(levels[levels.indexOf(zoom)+1]);
 $("zoomOut").onclick=()=>changeZoom(levels[levels.indexOf(zoom)-1]);
 $("zoomLevel").onchange=()=>changeZoom(label("zoomLevel"));
@@ -611,7 +655,7 @@ $("canvas").onpointerdown=event=>{
 $("canvas").onpointermove=event=>{
   if(pan?.id!==event.pointerId)return;
   panX=event.clientX-pan.x;panY=event.clientY-pan.y;
-  sizeArtwork();
+  scheduleArtwork();
 };
 $("canvas").onlostpointercapture=() => {pan=null;};
 new ResizeObserver(sizeArtwork).observe($("canvas"));
@@ -624,7 +668,20 @@ document.querySelectorAll("[data-mode]").forEach(button=>button.onclick=()=>{mod
 document.querySelectorAll("button[data-view]").forEach(button=>button.onclick=()=>switchView(button.dataset.view));
 $("help").onclick=()=>$("guide").showModal();
 $("closeGuide").onclick=()=>$("guide").close();
-const openUtility=setupUtilities({$,notify,saveFile,checkFile,loadImage,prepareImageFile,rasterBlob,sampleUrl});
+async function openUtility(target){
+  if(!utilityLoader){
+    $("utilityStatus").textContent="Memuat alat…";
+    utilityLoader=import("./utilities.mjs?v=14").then(({setupUtilities})=>
+      setupUtilities({$,notify,saveFile,checkFile,loadImage,prepareImageFile,rasterBlob,sampleUrl})
+    ).catch(error=>{utilityLoader=null;throw error;});
+  }
+  try{
+    const open=await utilityLoader;
+    if(studio===target)open(target);
+  }catch{
+    if(studio===target)$("utilityStatus").textContent="Alat belum bisa dimuat. Ketuk menunya sekali lagi.";
+  }
+}
 document.querySelectorAll("button[data-studio]").forEach(button=>button.onclick=()=>{
   studio=button.dataset.studio;
   document.querySelectorAll("button[data-studio]").forEach(el=>el.setAttribute("aria-pressed",el===button));
@@ -636,4 +693,4 @@ document.querySelectorAll("button[data-studio]").forEach(button=>button.onclick=
   window.scrollTo(0,0);
 });
 updateSettings();
-sample();
+renderPreview();

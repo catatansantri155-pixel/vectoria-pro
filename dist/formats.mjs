@@ -38,10 +38,19 @@ function exactPaths(layers,crop,outlines){
 }
 
 function meshArt(model){
-  const {mesh,w,h}=model;
+  const {mesh,w,h,meshColumns}=model;
+  const offsets=Array.from({length:meshColumns},(_,x)=>String(round((x+.5)/meshColumns)).replace(/^0\./,"."));
+  const hex=Array.from({length:256},(_,i)=>i.toString(16).padStart(2,"0"));
   const definitions=[],art=[];
   mesh.forEach(({y,stops},i)=>{
-    const colors=stops.map(([x,color])=>`<stop offset="${round(x)}" stop-color="${color}"/>`).join("");
+    const stopsMarkup=[];
+    for(let at=0;at<stops.length;at+=5){
+      const offset=offsets[stops[at]+256*stops[at+1]];
+      const r=hex[stops[at+2]],g=hex[stops[at+3]],b=hex[stops[at+4]];
+      const color=r[0]===r[1]&&g[0]===g[1]&&b[0]===b[1]?r[0]+g[0]+b[0]:r+g+b;
+      stopsMarkup.push(`<stop offset="${offset}" stop-color="#${color}"/>`);
+    }
+    const colors=stopsMarkup.join("");
     definitions.push(`<linearGradient id="shade${i}">${colors}</linearGradient>`);
     if(i===0){
       art.push(`<rect width="${w}" height="${h}" fill="url(#shade0)"/>`);
@@ -58,6 +67,8 @@ function meshArt(model){
   });
   return {definitions,art:`<g color-interpolation="sRGB">${art.join("")}</g>`};
 }
+
+export const svgStart='<svg xmlns="http://www.w3.org/2000/svg"';
 
 export function svgText(model,options={}){
   const {w,h,layers}=model;
@@ -95,7 +106,7 @@ export function svgText(model,options={}){
   const definitions=clip||gradients.length?`<defs>${clip}${gradients.join("")}</defs>`:"";
   const art=fading?.art??(model.exact?exactPaths(layers,crop,options.outlines):shapes.join(""));
   const content=options.crop?`<g clip-path="url(#tile)"><g transform="translate(${-crop.x} ${-crop.y})">${art}</g></g>`:art;
-  return `<svg xmlns="http://www.w3.org/2000/svg"${dim} viewBox="0 0 ${crop.w} ${crop.h}" fill-rule="evenodd"${model.exact&&!options.outlines?' shape-rendering="crispEdges"':""}>${definitions}${background}${content}</svg>`;
+  return `${svgStart}${dim} viewBox="0 0 ${crop.w} ${crop.h}" fill-rule="evenodd"${model.exact&&!options.outlines?' shape-rendering="crispEdges"':""}>${definitions}${background}${content}</svg>`;
 }
 function intersects(ring,crop) {
   let left=Infinity,top=Infinity,right=-Infinity,bottom=-Infinity;
@@ -179,20 +190,37 @@ function crc32(bytes){
   for(const byte of bytes)sum=CRC_TABLE[(sum^byte)&255]^(sum>>>8);
   return (sum^0xffffffff)>>>0;
 }
-export function zipFiles(files){
+export async function zipFiles(files){
   const contents=[],directory=[];
-  let offset=0,directorySize=0;
-  for(const {name,text,bytes} of files){
-    const title=encoder.encode(name),body=bytes??encoder.encode(text),checksum=crc32(body);
+  let offset=0,directorySize=0,count=0;
+  for(const {name,text,bytes,blob} of files){
+    const title=encoder.encode(name);
+    const original=bytes??(blob?new Uint8Array(await blob.arrayBuffer()):encoder.encode(text));
+    const checksum=crc32(original);
+    let body=original,method=0;
+    if(original.length>=256&&name.endsWith(".svg")&&typeof CompressionStream==="function"){
+      try{
+        const input=blob??new Blob([original]);
+        const compressed=await new Response(input.stream().pipeThrough(new CompressionStream("deflate-raw"))).blob();
+        if(compressed.size<original.length){
+          body=compressed;
+          method=8;
+        }
+      }catch{
+        // Store entries unchanged on browsers without raw DEFLATE.
+      }
+    }
+    const length=body instanceof Blob?body.size:body.length;
     const header=new Uint8Array(30),entry=new Uint8Array(46);
     const h=new DataView(header.buffer),d=new DataView(entry.buffer);
     h.setUint32(0,0x04034b50,true);
     h.setUint16(4,20,true);
     h.setUint16(6,0x800,true);
+    h.setUint16(8,method,true);
     h.setUint16(12,33,true);
     h.setUint32(14,checksum,true);
-    h.setUint32(18,body.length,true);
-    h.setUint32(22,body.length,true);
+    h.setUint32(18,length,true);
+    h.setUint32(22,original.length,true);
     h.setUint16(26,title.length,true);
     d.setUint32(0,0x02014b50,true);
     d.setUint16(4,20,true);
@@ -200,13 +228,14 @@ export function zipFiles(files){
     d.setUint32(42,offset,true);
     contents.push(header,title,body);
     directory.push(entry,title);
-    offset+=header.length+title.length+body.length;
+    offset+=header.length+title.length+length;
+    count++;
     directorySize+=entry.length+title.length;
   }
   const end=new Uint8Array(22),e=new DataView(end.buffer);
   e.setUint32(0,0x06054b50,true);
-  e.setUint16(8,files.length,true);
-  e.setUint16(10,files.length,true);
+  e.setUint16(8,count,true);
+  e.setUint16(10,count,true);
   e.setUint32(12,directorySize,true);
   e.setUint32(16,offset,true);
   return new Blob([...contents,...directory,end],{type:"application/zip"});

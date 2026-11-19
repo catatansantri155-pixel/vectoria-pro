@@ -1,4 +1,4 @@
-import {canUseMesh,hasSmoothShading,shadingMesh,wantsSmoothShading} from "./shading-mesh.mjs?v=2";
+import {canUseMesh,hasSmoothShading,shadingMesh,wantsSmoothShading} from "./shading-mesh.mjs?v=3";
 import {isoRings,reinforceInkStrokes,roundInkJoins,steadyInkRing} from "./ink-contours.mjs?v=20";
 import {fitRegionTones,hasShading,smoothTonePixels} from "./tones.mjs?v=14";
 import {sharedContours} from "./contours.mjs?v=18";

@@ -2,8 +2,6 @@ import {resample} from "./resample.mjs?v=14";
 
 const channels=[0,1,2];
 const luma=(pixels,i)=>Math.round(.2126*pixels[i]+.7152*pixels[i+1]+.0722*pixels[i+2]);
-const hex=value=>value.toString(16).padStart(2,"0");
-const color=(r,g,b)=>"#"+hex(r)+hex(g)+hex(b);
 
 export function hasSmoothShading(pixels,w,h){
   let continuous=0,total=0;
@@ -116,7 +114,14 @@ export function shadingMesh(pixels,w,h,{detail,gray,hd},progress){
     }
     points+=kept.length;
     if(index%32===0)progress(.55+.42*index/rows.length);
-    return {y:(y+.5)*h/height,stops:kept.map(x=>[(x+.5)/cols,color(row[x*3],row[x*3+1],row[x*3+2])])};
+    const stops=new Uint8Array(kept.length*5);
+    kept.forEach((x,i)=>{
+      const at=i*5;
+      stops[at]=x&255;
+      stops[at+1]=x>>8;
+      stops.set(row.subarray(x*3,x*3+3),at+2);
+    });
+    return {y:(y+.5)*h/height,stops};
   });
-  return {w,h,mesh,layers:[],points,objects:mesh.length-1};
+  return {w,h,mesh,meshColumns:cols,layers:[],points,objects:mesh.length-1};
 }

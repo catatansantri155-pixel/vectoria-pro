@@ -53,11 +53,11 @@ Dari root repo, jalankan:
 python -m http.server 8000 --directory dist
 ```
 
-Buka [localhost:8000](http://localhost:8000/). Untuk uji cepat, klik **Coba contoh**, periksa pratinjau, unduh SVG, dan buka **Editor gambar**. Adobe menilai aset secara independen dari preset ukuran aplikasi.
+Buka [localhost:8000](http://localhost:8000/). Konverter mulai tanpa gambar. Untuk uji cepat, klik **Coba contoh**, periksa pratinjau, unduh SVG, dan buka **Editor gambar**. Adobe menilai aset secara independen dari preset ukuran aplikasi.
 
 
 ### Ilustrasi 3D dan file gambar
-- **Ilustrasi 3D dan gradasi** menggunakan bidang gradien SVG pada gambar tanpa transparansi untuk menjaga highlight dan bayangan. Mode **Otomatis** mendeteksi gradasi pada sumber. **Trace HD** menggunakan interpolasi Lanczos dengan sampel hingga 2×, dibatasi 1.536 piksel per sisi dan sekitar 1,8 juta sampel. Penajaman lokal bekerja pada kecerahan agar tidak memucatkan warna. Pilih SVG untuk menyimpan gradien sebagai elemen vektor, atau PNG/JPG untuk hasil raster. Ekspor EPS/PDF menghasilkan bidang warna datar. Gambar transparan atau pilihan hapus latar menggunakan pelacakan kontur.
+- **Ilustrasi 3D dan gradasi** menggunakan bidang gradien SVG pada gambar tanpa transparansi untuk menjaga highlight dan bayangan. Mode **Otomatis** mendeteksi gradasi pada sumber. **Trace HD** menggunakan interpolasi Lanczos dengan sampel hingga 2×, dibatasi 1.536 piksel per sisi dan sekitar 1,8 juta sampel. Penajaman lokal bekerja pada kecerahan agar tidak memucatkan warna. Pilih **SVG** untuk menyimpan gradien sebagai elemen vektor, **SVG ZIP** untuk mengunduh SVG secara terkompresi, atau **PNG/JPG** untuk hasil raster. Arsip ZIP menggunakan kompresi tanpa kehilangan kualitas jika didukung browser. Ekspor EPS/PDF menghasilkan bidang warna datar. Gambar transparan atau pilihan hapus latar menggunakan pelacakan kontur.
 - Vektora membaca tanda format di dalam file dan mencoba jalur pemuatan biasa jika dekode langsung gagal. Format yang tidak didukung tetap bergantung pada dekoder browser. Ekspor ulang file yang gagal sebagai PNG atau JPG.
 - Studio Perbesar memiliki ekspor 4K dan interpolasi Lanczos atau Mitchell–Netravali untuk gambar yang sesuai batas memori. Perbesaran tidak merekonstruksi detail yang hilang.
 
