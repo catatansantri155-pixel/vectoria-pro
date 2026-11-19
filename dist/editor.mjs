@@ -1,4 +1,4 @@
-import {icon, mountIcons} from "./icons.mjs";
+import {icon, mountIcons} from "./icons.mjs?v=1";
 const $ = id => document.getElementById(id);
 mountIcons();
 const NS = "http://www.w3.org/2000/svg";

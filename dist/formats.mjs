@@ -9,7 +9,7 @@ export function rasterSize(w,h,preset){
   const longest = Math.max(w,h);
   const requested = preset==="native" ? longest : Number(preset);
   const edge = Math.min(4096,requested);
-  const scale = edge/longest;
+  const scale = Math.min(edge/longest,Math.sqrt(16e6/(w*h)));
   return [Math.max(1,Math.round(w*scale)),Math.max(1,Math.round(h*scale))];
 }
 export function traceSize(w,h,detail,hd){
@@ -25,7 +25,7 @@ const sequence = commands => commands.map(([op,points])=>op+coords(points)).join
 function exactPaths(layers,crop,outlines){
   const shapes=[];
   for(const {fill,opacity,boxes} of layers){
-    const paint=outlines?`fill="none" stroke="${fill}" stroke-width=".18"`:`fill="${fill}"${opacity<1?` fill-opacity="${opacity}"`:""}`;
+    const paint=outlines?`fill="none" stroke="${fill}" stroke-width=".18"`:`fill="${fill}"${opacity<1?` fill-opacity="${Number(opacity.toFixed(4))}"`:""}`;
     let paths=[];
     for(const [x,y,w,h] of boxes){
       if(x+w<=crop.x||y+h<=crop.y||x>=crop.x+crop.w||y>=crop.y+crop.h)continue;
@@ -194,11 +194,12 @@ export async function zipFiles(files){
   const contents=[],directory=[];
   let offset=0,directorySize=0,count=0;
   for(const {name,text,bytes,blob} of files){
-    const title=encoder.encode(name);
+    const safeName=String(name).replace(/[\\/:*?"<>|\u0000-\u001f]/g,"-").replace(/^\.+/,"").trim()||"vektora";
+    const title=encoder.encode(safeName);
     const original=bytes??(blob?new Uint8Array(await blob.arrayBuffer()):encoder.encode(text));
     const checksum=crc32(original);
     let body=original,method=0;
-    if(original.length>=256&&name.endsWith(".svg")&&typeof CompressionStream==="function"){
+    if(original.length>=256&&safeName.endsWith(".svg")&&typeof CompressionStream==="function"){
       try{
         const input=blob??new Blob([original]);
         const compressed=await new Response(input.stream().pipeThrough(new CompressionStream("deflate-raw"))).blob();

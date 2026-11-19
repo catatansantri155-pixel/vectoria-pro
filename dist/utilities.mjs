@@ -202,7 +202,7 @@ export function setupUtilities({$,notify,saveFile,checkFile,loadImage,prepareIma
           const choice=$("upscaleFactor").value;
           const factor=choice==="stock"?Math.max(1,Math.sqrt(4e6/(w*h))):choice==="4k"?4096/Math.max(w,h):Number(choice);
           const width=Math.ceil(w*factor),height=Math.ceil(h*factor);
-          [canvas.width,canvas.height]=fit(width,height,4096**2,4096);
+          [canvas.width,canvas.height]=fit(width,height,16e6,4096);
           capped=canvas.width!==width||canvas.height!==height;
           browserResize=!await resizeInWorker(image,canvas,$("sharpen").checked,signal);
         }
