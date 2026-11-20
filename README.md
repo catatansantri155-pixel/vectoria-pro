@@ -7,7 +7,7 @@ Konverter JPG, PNG, WebP, BMP, GIF, dan AVIF dengan pemrosesan lokal. GIF dipros
 - **Vektor** menangkap kontur sebagai path. Pilih mode warna atau monokrom, atur detail, warna, ambang, pembersihan bintik dan latar putih, lalu bandingkan hasil. Zoom berpusat pada pratinjau. Hasil dapat diekspor sebagai SVG, EPS, PDF, PNG, atau JPG.
 - **Lembar ikon** mendeteksi ikon terpisah pada latar polos atau transparan, dengan opsi kisi manual hingga 20 × 20. Hasil diunduh sebagai ZIP berisi SVG individual atau PNG. Unggah file SVG atau EPS satu per satu ke Adobe Stock.
 - **Perbesar** memakai interpolasi dan pemulihan tepi opsional. Resolusi keluaran dibatasi 16 MP untuk mengendalikan memori.
-- **Pola** membantu membuat ubin dengan pengulangan biasa atau cermin empat arah.
+- **Pola** membuat ubin dengan kisi lurus, cermin empat arah, atau susun bata. Atur jumlah motif, rotasi, dan ukuran ekspor, lalu periksa sambungan pada pratinjau 3 × 3. PNG mempertahankan transparansi sumber.
 - **Gradien** membuat gradien bertekstur opsional dengan empat palet, rasio, dan arah yang dapat diedit. Ekspor loop empat detik tersedia jika browser mendukung MediaRecorder dan Canvas CaptureStream.
 - **Editor gambar** di `editor.html` tetap menggunakan penyimpanan proyek browser dari versi sebelumnya.
 

@@ -89,17 +89,32 @@ function resizeInWorker(image,canvas,sharp,signal,session,clarity=false){
     catch(error){close();reject(error);}
   });
 }
-function pattern(canvas,image,style){
-  const w=canvas.width/2,h=canvas.height/2,g=canvas.getContext("2d");
-  g.imageSmoothingQuality="high";
-  for(let row=0;row<2;row++){
-    for(let col=0;col<2;col++){
-      g.save();
-      const mirror=style==="mirror";
-      g.translate((col+(mirror?col:0))*w,(row+(mirror?row:0))*h);
-      g.scale(mirror&&col?-1:1,mirror&&row?-1:1);
-      g.drawImage(image,0,0,w,h);
-      g.restore();
+const patternControls=["patternStyle","patternGrid","patternRotation","patternSize"];
+function pattern(canvas,image,{style,grid,rotation,size}){
+  const sourceW=image.naturalWidth,sourceH=image.naturalHeight;
+  const quarterTurn=rotation===90||rotation===270;
+  const [motifW,motifH]=quarterTurn?[sourceH,sourceW]:[sourceW,sourceH];
+  const factor=size==="auto"?grid:Number(size)/Math.max(motifW,motifH);
+  const [width,height]=fit(motifW*factor,motifH*factor,10e6,size==="auto"?4000:4096);
+  const brick=style==="brick",mirror=style==="mirror";
+  // An even motif width gives the brick layout a whole-pixel half step.
+  const step=brick?2:1;
+  const w=Math.max(step,Math.floor(width/grid/step)*step);
+  const h=Math.max(1,Math.floor(height/grid));
+  canvas.width=w*grid;
+  canvas.height=h*grid;
+  const context=canvas.getContext("2d");
+  context.imageSmoothingQuality="high";
+  for(let row=0;row<grid;row++){
+    const shift=brick&&row%2?w/2:0;
+    for(let col=shift?-1:0;col<grid;col++){
+      context.save();
+      context.translate((col+.5)*w+shift,(row+.5)*h);
+      context.scale(mirror&&col%2?-1:1,mirror&&row%2?-1:1);
+      context.rotate(rotation*Math.PI/180);
+      const drawW=quarterTurn?h:w,drawH=quarterTurn?w:h;
+      context.drawImage(image,-drawW/2,-drawH/2,drawW,drawH);
+      context.restore();
     }
   }
 }
@@ -153,7 +168,7 @@ export function setupUtilities({$,notify,saveFile,collectBatch,fileName,zipFiles
   function refreshBatch(){
     const busy=Boolean(batchController), queued=kind!=="gradient"&&queue.length>1;
     $("utilityQueueBox").hidden=!queued;
-    for(const id of ["utilityRun","utilityChoose","utilitySample","utilityFormat","upscaleFactor","sharpen","upscaleClarity","patternStyle","utilityQueue"])$(id).disabled=busy;
+    for(const id of ["utilityRun","utilityChoose","utilitySample","utilityFormat","upscaleFactor","sharpen","upscaleClarity",...patternControls,"utilityQueue"])$(id).disabled=busy;
     $("utilityRun").lastChild.textContent=queued?`Proses ${queue.length} gambar`:"Buat hasil";
     $("utilityCancel").hidden=batchProgress.hidden=!busy;
     $("utilityBatchDownload").disabled=busy||Boolean(batchExport)||!queue.some(job=>job.blob);
@@ -186,9 +201,22 @@ export function setupUtilities({$,notify,saveFile,collectBatch,fileName,zipFiles
     if(!output)return;
     const isUpscale=kind==="upscale"&&previewSource;
     const detail=isUpscale&&$("upscaleDetail").checked;
+    const repeated=kind==="pattern"&&$("patternPreviewMode").value==="repeat";
     const [w,h]=detail
       ?[Math.min(480,output.width),Math.min(480,output.height)]
       :fit(output.width,output.height,800**2,800);
+    const cellW=repeated?Math.max(1,Math.round(w/3)):w;
+    const cellH=repeated?Math.max(1,Math.round(h/3)):h;
+    if(repeated){
+      preview.width=cellW*3;
+      preview.height=cellH*3;
+      const context=preview.getContext("2d");
+      context.imageSmoothingQuality="high";
+      for(let y=0;y<3;y++){
+        for(let x=0;x<3;x++)context.drawImage(output,x*cellW,y*cellH,cellW,cellH);
+      }
+      return;
+    }
     if(preview.width!==w||preview.height!==h){preview.width=w;preview.height=h;}
     const context=preview.getContext("2d");
     context.clearRect(0,0,w,h);
@@ -236,14 +264,16 @@ export function setupUtilities({$,notify,saveFile,collectBatch,fileName,zipFiles
   }
   setPalette();
   function rasterOptions(){
-    return {choice:$("upscaleFactor").value,sharp:$("sharpen").checked,clarity:$("upscaleClarity").checked,style:$("patternStyle").value};
+    return {
+      choice:$("upscaleFactor").value,sharp:$("sharpen").checked,clarity:$("upscaleClarity").checked,
+      style:$("patternStyle").value,grid:Number($("patternGrid").value),
+      rotation:Number($("patternRotation").value),size:$("patternSize").value
+    };
   }
   async function renderRaster(canvas,image,tool,options,signal,session){
     const w=image.naturalWidth,h=image.naturalHeight;
     if(tool==="pattern"){
-      const [width,height]=fit(w,h,2.5e6,2000);
-      canvas.width=width*2;canvas.height=height*2;
-      pattern(canvas,image,options.style);
+      pattern(canvas,image,options);
       return {};
     }
     const {choice,sharp,clarity}=options;
@@ -459,7 +489,8 @@ export function setupUtilities({$,notify,saveFile,collectBatch,fileName,zipFiles
   };
   $("gradientPreset").onchange=()=>{setPalette();run();};
   for(const id of ["gradientFirst","gradientSecond","gradientRatio","angle","grain"])$(id).onchange=run;
-  for(const id of ["patternStyle","upscaleFactor","sharpen","upscaleClarity"])$(id).onchange=()=>{
+  $("patternPreviewMode").onchange=paintPreview;
+  for(const id of [...patternControls,"upscaleFactor","sharpen","upscaleClarity"])$(id).onchange=()=>{
     if(queue.length<2){run();return;}
     clearPreview();
     resetBatch();
@@ -506,7 +537,7 @@ export function setupUtilities({$,notify,saveFile,collectBatch,fileName,zipFiles
     const isGradient=studio==="gradient";
     [$("utilityTitle").textContent,$("utilityDescription").textContent]=studioCopy[studio];
     $("upscaleFields").hidden=$("upscaleCompare").hidden=studio!=="upscale";
-    $("patternFields").hidden=studio!=="pattern";
+    $("patternFields").hidden=$("patternCompare").hidden=studio!=="pattern";
     $("gradientFields").hidden=!isGradient;
     $("utilityChoose").hidden=$("utilitySample").hidden=isGradient;
     $("videoOption").hidden=!isGradient||!availableVideo;

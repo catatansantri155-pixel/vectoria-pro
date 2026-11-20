@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-title" content="Vektora">
 <script type="module" src="pwa.mjs?v=1"></script>
 <link rel="stylesheet" href="converter.css?v=23">
-<script type="module" src="converter.mjs?v=35"></script>
+<script type="module" src="converter.mjs?v=36"></script>
 </head>
 <body>
 <header class="header"><div class="header-inner">
@@ -160,7 +160,32 @@
         <label class="check"><input id="upscaleClarity" type="checkbox"> Tambah kejelasan (kontras lokal)</label>
         <p class="muted">Detail yang masih terlihat diperjelas. Detail yang sudah hilang dari sumber tetap terbatas.</p>
       </div>
-      <div id="patternFields" hidden><label class="stack">Susunan pola<select id="patternStyle"><option value="mirror">Cermin empat arah</option><option value="repeat">Ulangi kotak</option></select></label><p class="muted">Mode cermin menutup sambungan pada tepi ubin.</p></div>
+      <div id="patternFields" hidden>
+        <label class="stack">Susunan pola
+          <select id="patternStyle">
+            <option value="mirror">Cermin empat arah</option>
+            <option value="repeat">Kisi lurus</option>
+            <option value="brick">Susun bata</option>
+          </select>
+        </label>
+        <label class="stack">Motif per ubin
+          <select id="patternGrid">
+            <option value="2">2 × 2</option><option value="4">4 × 4</option><option value="6">6 × 6</option>
+          </select>
+        </label>
+        <label class="stack">Putar motif
+          <select id="patternRotation">
+            <option value="0">0°</option><option value="90">90°</option><option value="180">180°</option><option value="270">270°</option>
+          </select>
+        </label>
+        <label class="stack">Ukuran ubin ekspor
+          <select id="patternSize">
+            <option value="auto">Ikuti gambar</option><option value="1024">Hingga 1.024 px</option>
+            <option value="2048">Hingga 2.048 px</option><option value="4096">Hingga 4.096 px</option>
+          </select>
+        </label>
+        <p class="muted">Ukuran berlaku untuk sisi terpanjang, dengan batas 10 MP per ubin.</p>
+      </div>
       <div id="gradientFields" hidden>
         <label class="stack">Palet<select id="gradientPreset"><option value="dusk">Senja ungu</option><option value="sunrise">Fajar persik</option><option value="forest">Hutan berkabut</option><option value="ocean">Laut biru</option></select></label>
         <div class="color-fields"><label class="stack">Warna 1<input id="gradientFirst" type="color"></label><label class="stack">Warna 2<input id="gradientSecond" type="color"></label></div>
@@ -174,6 +199,13 @@
       <div id="upscaleCompare" class="export-panel utility-export" hidden>
         <label><span class="sr">Tampilan perbandingan</span><select id="upscalePreviewMode"><option value="compare">Before / After</option><option value="result">Hasil</option><option value="source">Gambar asli</option></select></label>
         <label class="check"><input id="upscaleDetail" type="checkbox"> Detail tengah</label>
+      </div>
+      <div id="patternCompare" class="export-panel utility-export" hidden>
+        <label class="stack">Tampilan pola
+          <select id="patternPreviewMode">
+            <option value="tile">Ubin ekspor</option><option value="repeat">Uji sambungan · 3 × 3</option>
+          </select>
+        </label>
       </div>
       <div class="utility-preview"><canvas id="utilityCanvas" aria-label="Pratinjau hasil studio"></canvas></div>
       <div id="upscaleSplit" class="upscale-split" hidden>
