@@ -44,7 +44,7 @@ function gradient(canvas,opts,texture,offset=0){
   }
   g.putImageData(image,0,0);
 }
-function resizeInWorker(image,canvas,sharp,signal,session){
+function resizeInWorker(image,canvas,sharp,signal,session,clarity=false){
   const w=image.naturalWidth,h=image.naturalHeight;
   // Downscaled or very large sources use the browser path to bound input-memory costs.
   if(typeof Worker!=="function"||w*h>9e6||canvas.width<w||canvas.height<h){
@@ -60,7 +60,7 @@ function resizeInWorker(image,canvas,sharp,signal,session){
   const pixels=input.getImageData(0,0,w,h).data;
   source.width=source.height=0;
   return new Promise((resolve,reject)=>{
-    const worker=session?.worker??new Worker(new URL("./resample-worker.mjs?v=15",import.meta.url),{type:"module"});
+    const worker=session?.worker??new Worker(new URL("./resample-worker.mjs?v=16",import.meta.url),{type:"module"});
     if(session)session.worker=worker;
     function close(reuse=false){
       signal.removeEventListener("abort",cancel);
@@ -85,7 +85,7 @@ function resizeInWorker(image,canvas,sharp,signal,session){
       }catch(error){reject(error);}
     };
     worker.onerror=()=>{close();reject(Error("Mesin upscale gagal berjalan di browser ini."));};
-    try{worker.postMessage({pixels,w,h,width:canvas.width,height:canvas.height,sharp},[pixels.buffer]);}
+    try{worker.postMessage({pixels,w,h,width:canvas.width,height:canvas.height,sharp,clarity},[pixels.buffer]);}
     catch(error){close();reject(error);}
   });
 }
@@ -153,7 +153,7 @@ export function setupUtilities({$,notify,saveFile,collectBatch,fileName,zipFiles
   function refreshBatch(){
     const busy=Boolean(batchController), queued=kind!=="gradient"&&queue.length>1;
     $("utilityQueueBox").hidden=!queued;
-    for(const id of ["utilityRun","utilityChoose","utilitySample","utilityFormat","upscaleFactor","sharpen","patternStyle","utilityQueue"])$(id).disabled=busy;
+    for(const id of ["utilityRun","utilityChoose","utilitySample","utilityFormat","upscaleFactor","sharpen","upscaleClarity","patternStyle","utilityQueue"])$(id).disabled=busy;
     $("utilityRun").lastChild.textContent=queued?`Proses ${queue.length} gambar`:"Buat hasil";
     $("utilityCancel").hidden=batchProgress.hidden=!busy;
     $("utilityBatchDownload").disabled=busy||Boolean(batchExport)||!queue.some(job=>job.blob);
@@ -236,7 +236,7 @@ export function setupUtilities({$,notify,saveFile,collectBatch,fileName,zipFiles
   }
   setPalette();
   function rasterOptions(){
-    return {choice:$("upscaleFactor").value,sharp:$("sharpen").checked,style:$("patternStyle").value};
+    return {choice:$("upscaleFactor").value,sharp:$("sharpen").checked,clarity:$("upscaleClarity").checked,style:$("patternStyle").value};
   }
   async function renderRaster(canvas,image,tool,options,signal,session){
     const w=image.naturalWidth,h=image.naturalHeight;
@@ -246,12 +246,12 @@ export function setupUtilities({$,notify,saveFile,collectBatch,fileName,zipFiles
       pattern(canvas,image,options.style);
       return {};
     }
-    const {choice,sharp}=options;
+    const {choice,sharp,clarity}=options;
     const factor=choice==="stock"?Math.max(1,Math.sqrt(4e6/(w*h))):choice==="4k"?4096/Math.max(w,h):Number(choice);
     const width=Math.ceil(w*factor),height=Math.ceil(h*factor);
     [canvas.width,canvas.height]=fit(width,height,16e6,4096);
     const capped=canvas.width!==width||canvas.height!==height;
-    const browserResize=!await resizeInWorker(image,canvas,sharp,signal,session);
+    const browserResize=!await resizeInWorker(image,canvas,sharp,signal,session,clarity);
     return {capped,browserResize};
   }
   async function encodeRaster(canvas,format){
@@ -459,7 +459,7 @@ export function setupUtilities({$,notify,saveFile,collectBatch,fileName,zipFiles
   };
   $("gradientPreset").onchange=()=>{setPalette();run();};
   for(const id of ["gradientFirst","gradientSecond","gradientRatio","angle","grain"])$(id).onchange=run;
-  for(const id of ["patternStyle","upscaleFactor","sharpen"])$(id).onchange=()=>{
+  for(const id of ["patternStyle","upscaleFactor","sharpen","upscaleClarity"])$(id).onchange=()=>{
     if(queue.length<2){run();return;}
     clearPreview();
     resetBatch();
