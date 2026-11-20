@@ -247,10 +247,8 @@ h2{font-weight:630}
   box-shadow:0 1px 1px white inset,0 5px 24px rgba(46,35,79,.18);
   backdrop-filter:blur(24px) saturate(165%);-webkit-backdrop-filter:blur(24px) saturate(165%);
 }
-.dock-actions{display:grid;grid-template-columns:44px minmax(0,1fr) minmax(0,1fr);gap:5px;padding:0 0 5px}
-.dock-actions.utility-dock{grid-template-columns:1fr 1fr}
+.dock-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;padding:0 0 5px}
 .dock-actions .button{min-height:44px;margin:0;border-radius:15px;padding:0 6px}
-.dock-actions .outline{background:#fff9}
 .dock-actions #download,.dock-actions #utilityDownload{background:#e8e0ff;color:#452aab}
 .dock-actions button:disabled{opacity:.48}
 .app-dock .main-nav{order:1;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));width:100%;padding:4px 0 0;gap:1px;border-top:1px solid var(--line)}
@@ -287,7 +285,6 @@ h2{font-weight:630}
   .header,.app-dock{background:rgba(250,248,255,.96);backdrop-filter:none;-webkit-backdrop-filter:none}
 }
 
-.desktop-action,.dock-actions .desktop-action{display:none}
 @media(min-width:960px){
   body{
     --desktop-header:calc(69px + env(safe-area-inset-top));
@@ -323,7 +320,5 @@ h2{font-weight:630}
     grid-template-columns:minmax(0,1fr);gap:8px;padding:16px 0 0;border-top:1px solid var(--line);
   }
   .app-dock .dock-actions .button{justify-content:flex-start;gap:9px;padding:0 12px;border-radius:10px;font-size:13px}
-  .dock-actions span.desktop-action{display:inline}
-  .dock-actions button.desktop-action{display:inline-flex}
   #notice{bottom:23px}
 }

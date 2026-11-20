@@ -153,7 +153,7 @@ export function setupUtilities({$,notify,saveFile,collectBatch,fileName,zipFiles
   function refreshBatch(){
     const busy=Boolean(batchController), queued=kind!=="gradient"&&queue.length>1;
     $("utilityQueueBox").hidden=!queued;
-    for(const id of ["utilityRun","utilityChoose","utilityDockPick","utilitySample","utilityFormat","upscaleFactor","sharpen","patternStyle","utilityQueue"])$(id).disabled=busy;
+    for(const id of ["utilityRun","utilityChoose","utilitySample","utilityFormat","upscaleFactor","sharpen","patternStyle","utilityQueue"])$(id).disabled=busy;
     $("utilityRun").lastChild.textContent=queued?`Proses ${queue.length} gambar`:"Buat hasil";
     $("utilityCancel").hidden=batchProgress.hidden=!busy;
     $("utilityBatchDownload").disabled=busy||Boolean(batchExport)||!queue.some(job=>job.blob);
@@ -409,7 +409,7 @@ export function setupUtilities({$,notify,saveFile,collectBatch,fileName,zipFiles
       if(ticket===serial&&error.name!=="AbortError"){state(error.message);notify(error.message);}
     }finally{if(output!==canvas)canvas.width=canvas.height=0;}
   }
-  $("utilityChoose").onclick=$("utilityDockPick").onclick=()=>$("utilityFile").click();
+  $("utilityChoose").onclick=()=>$("utilityFile").click();
   $("utilityFile").onchange=async event=>{
     const selected=collectBatch(event.target.files);
     event.target.value="";
@@ -508,7 +508,7 @@ export function setupUtilities({$,notify,saveFile,collectBatch,fileName,zipFiles
     $("upscaleFields").hidden=$("upscaleCompare").hidden=studio!=="upscale";
     $("patternFields").hidden=studio!=="pattern";
     $("gradientFields").hidden=!isGradient;
-    $("utilityChoose").hidden=$("utilityDockPick").hidden=$("utilitySample").hidden=isGradient;
+    $("utilityChoose").hidden=$("utilitySample").hidden=isGradient;
     $("videoOption").hidden=!isGradient||!availableVideo;
     $("videoOption").disabled=$("videoOption").hidden;
     if(changed){

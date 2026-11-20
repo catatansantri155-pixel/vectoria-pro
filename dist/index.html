@@ -12,8 +12,8 @@
 <link rel="manifest" href="app.webmanifest?v=6">
 <meta name="apple-mobile-web-app-title" content="Vektora">
 <script type="module" src="pwa.mjs?v=1"></script>
-<link rel="stylesheet" href="converter.css?v=22">
-<script type="module" src="converter.mjs?v=33"></script>
+<link rel="stylesheet" href="converter.css?v=23">
+<script type="module" src="converter.mjs?v=34"></script>
 </head>
 <body>
 <header class="header"><div class="header-inner">
@@ -32,12 +32,10 @@
     <a class="nav-link editor-link" href="editor.html" data-icon="pencil">Editor</a>
   </nav>
   <div class="dock-actions" id="vectorActions">
-    <button id="dockPick" class="button outline" type="button" data-icon="upload" aria-label="Pilih gambar" title="Pilih gambar"><span class="desktop-action">Pilih gambar</span></button>
     <button id="run" class="button primary run" type="button" data-icon="spark" disabled>Buat vektor</button>
     <button id="download" class="button primary" data-icon="download" disabled>Unduh</button>
   </div>
-  <div class="dock-actions utility-dock" id="utilityActions" hidden>
-    <button id="utilityDockPick" class="button outline desktop-action" type="button" data-icon="upload">Pilih gambar</button>
+  <div class="dock-actions" id="utilityActions" hidden>
     <button id="utilityRun" class="button primary run" data-icon="spark">Buat hasil</button>
     <button id="utilityDownload" class="button primary" data-icon="download" disabled>Unduh</button>
   </div>
