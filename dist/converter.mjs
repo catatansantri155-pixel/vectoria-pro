@@ -708,7 +708,7 @@ $("closeGuide").onclick=()=>$("guide").close();
 async function openUtility(target){
   if(!utilityLoader){
     $("utilityStatus").textContent="Memuat alat…";
-    utilityLoader=import("./utilities.mjs?v=25").then(({setupUtilities})=>
+    utilityLoader=import("./utilities.mjs?v=26").then(({setupUtilities})=>
       setupUtilities({$,notify,saveFile,collectBatch,fileName,zipFiles,loadImage,prepareImageFile,rasterBlob,sampleUrl})
     ).catch(error=>{utilityLoader=null;throw error;});
   }

@@ -1,13 +1,15 @@
 const gradients={
-  dusk:["#2b1558","#cb87ed"],
-  sunrise:["#a43f7d","#ffd28c"],
-  forest:["#12313c","#9fbb8e"],
-  ocean:["#162a69","#60d5df"]
+  dusk:["#2b1558","#cb87ed","#7449a5"],
+  sunrise:["#a43f7d","#ffd28c","#ee8381"],
+  forest:["#12313c","#9fbb8e","#588678"],
+  ocean:["#162a69","#60d5df","#3483b4"],
+  ember:["#46172b","#ffbf69","#d54f36"],
+  mint:["#084c47","#d2f9c1","#5dbe95"]
 };
 const studioCopy={
   upscale:["Perbesar gambar.","Naikkan resolusi hingga 4× dan perjelas tepi yang masih terlihat pada gambar sumber."],
   pattern:["Buat pola berulang.","Ubah gambar menjadi ubin pola untuk latar, kemasan, atau tekstil."],
-  gradient:["Rancang gradien.","Pilih dua warna, tambahkan tekstur, lalu ekspor gambar atau video yang berulang."]
+  gradient:["Rancang gradien.","Atur warna, bentuk, dan tekstur untuk membuat latar gambar atau video loop."]
 };
 const frame=()=>new Promise(resolve=>requestAnimationFrame(resolve));
 function fit(w,h,maxArea,maxEdge){
@@ -29,10 +31,21 @@ function noiseTexture(size){
 function gradient(canvas,opts,texture,offset=0){
   const {width:w,height:h}=canvas,g=canvas.getContext("2d",{willReadFrequently:Boolean(opts.grain)});
   const direction=(opts.angle+offset)*Math.PI/180;
-  const dx=Math.cos(direction),dy=Math.sin(direction);
-  const span=(Math.abs(w*dx)+Math.abs(h*dy))/2;
-  const paint=g.createLinearGradient(w/2-dx*span,h/2-dy*span,w/2+dx*span,h/2+dy*span);
+  let paint;
+  if(opts.type==="linear"){
+    const dx=Math.cos(direction),dy=Math.sin(direction);
+    const span=(Math.abs(w*dx)+Math.abs(h*dy))/2;
+    paint=g.createLinearGradient(w/2-dx*span,h/2-dy*span,w/2+dx*span,h/2+dy*span);
+  }else{
+    const x=w*(opts.x+(opts.type==="radial"?offset/900:0));
+    const y=h*opts.y;
+    if(opts.type==="radial"){
+      const radius=Math.hypot(Math.max(Math.abs(x),Math.abs(w-x)),Math.max(y,h-y));
+      paint=g.createRadialGradient(x,y,0,x,y,radius);
+    }else paint=g.createConicGradient(direction,x,y);
+  }
   paint.addColorStop(0,opts.first);
+  if(opts.middle)paint.addColorStop(opts.stop,opts.middle);
   paint.addColorStop(1,opts.second);
   g.fillStyle=paint;
   g.fillRect(0,0,w,h);
@@ -253,15 +266,36 @@ export function setupUtilities({$,notify,saveFile,collectBatch,fileName,zipFiles
     context.fillRect(boundary-1,0,2,h);
   }
   function gradientOptions(){
-    const angle=$("angle").valueAsNumber;
-    if(!Number.isFinite(angle)||angle<0||angle>=360)throw Error("Arah gradien harus antara 0 dan 359 derajat.");
-    return {angle,ratio:Number($("gradientRatio").value),grain:Number($("grain").value),first:$("gradientFirst").value,second:$("gradientSecond").value};
+    const type=$("gradientType").value;
+    const angle=type==="radial"?0:$("angle").valueAsNumber;
+    if(!Number.isFinite(angle)||angle<0||angle>=360)throw Error("Sudut gradien harus antara 0 dan 359 derajat.");
+    const x=type==="linear"?50:$("gradientX").valueAsNumber, y=type==="linear"?50:$("gradientY").valueAsNumber;
+    if(![x,y].every(value=>Number.isFinite(value)&&value>=0&&value<=100))throw Error("Pusat gradien harus berada antara 0 dan 100 persen.");
+    return {
+      type,angle,x:x/100,y:y/100,ratio:Number($("gradientRatio").value),
+      grain:Number($("grain").value),edge:Number($("gradientSize").value),
+      first:$("gradientFirst").value,second:$("gradientSecond").value,
+      middle:$("gradientMiddleEnabled").checked?$("gradientMiddle").value:null,stop:Number($("gradientStop").value)/100
+    };
+  }
+  function renderGradient(canvas,opts,edge){
+    [canvas.width,canvas.height]=gradientDimensions(opts.ratio,edge);
+    gradient(canvas,opts,opts.grain?noiseTexture(canvas.width*canvas.height):null);
   }
   function setPalette(){
-    const [first,second]=gradients[$("gradientPreset").value];
+    const [first,second,middle]=gradients[$("gradientPreset").value];
     $("gradientFirst").value=first;
     $("gradientSecond").value=second;
+    $("gradientMiddle").value=middle;
   }
+  function updateGradientFields(){
+    const type=$("gradientType").value;
+    $("gradientAngleField").hidden=type==="radial";
+    $("gradientCenter").hidden=type==="linear";
+    $("gradientMiddleFields").hidden=!$("gradientMiddleEnabled").checked;
+  }
+  $("gradientType").querySelector('[value="conic"]').disabled=
+    typeof preview.getContext("2d").createConicGradient!=="function";
   setPalette();
   function rasterOptions(){
     return {
@@ -419,8 +453,7 @@ export function setupUtilities({$,notify,saveFile,collectBatch,fileName,zipFiles
       let capped=false,browserResize=false;
       if(current==="gradient"){
         const options=gradientOptions();
-        [canvas.width,canvas.height]=gradientDimensions(options.ratio,1920);
-        gradient(canvas,options,options.grain?noiseTexture(canvas.width*canvas.height):null);
+        renderGradient(canvas,options,Math.min(options.edge,800));
         lastGradient=options;
       }else{
         const image=await loadImage(source);
@@ -433,7 +466,8 @@ export function setupUtilities({$,notify,saveFile,collectBatch,fileName,zipFiles
       previewSource=current==="upscale"?inputImage:null;
       paintPreview();
       const inputSize=previewSource?`${previewSource.naturalWidth} × ${previewSource.naturalHeight} → `:"";
-      state(`${inputSize}${output.width.toLocaleString("id-ID")} × ${output.height.toLocaleString("id-ID")} px${capped?" · batas 4K / 16 MP":""}${browserResize?" · interpolasi browser":""}`);
+      const [w,h]=current==="gradient"?gradientDimensions(lastGradient.ratio,lastGradient.edge):[output.width,output.height];
+      state(`${inputSize}${w.toLocaleString("id-ID")} × ${h.toLocaleString("id-ID")} px${capped?" · batas 4K / 16 MP":""}${browserResize?" · interpolasi browser":""}`);
       setReady(true);
     }catch(error){
       if(ticket===serial&&error.name!=="AbortError"){state(error.message);notify(error.message);}
@@ -488,7 +522,14 @@ export function setupUtilities({$,notify,saveFile,collectBatch,fileName,zipFiles
     });
   };
   $("gradientPreset").onchange=()=>{setPalette();run();};
-  for(const id of ["gradientFirst","gradientSecond","gradientRatio","angle","grain"])$(id).onchange=run;
+  for(const id of ["gradientFirst","gradientSecond","gradientMiddle"])$(id).onchange=()=>{
+    $("gradientPreset").value="custom";
+    run();
+  };
+  for(const id of ["gradientType","gradientMiddleEnabled"])$(id).onchange=()=>{updateGradientFields();run();};
+  for(const id of ["gradientRatio","gradientSize","angle","gradientX","gradientY","grain","gradientStop"])$(id).onchange=run;
+  $("grain").oninput=()=>{$("gradientGrainValue").value=$("grain").value;};
+  $("gradientStop").oninput=()=>{$("gradientStopValue").value=$("gradientStop").value+"%";};
   $("patternPreviewMode").onchange=paintPreview;
   for(const id of [...patternControls,"upscaleFactor","sharpen","upscaleClarity"])$(id).onchange=()=>{
     if(queue.length<2){run();return;}
@@ -511,6 +552,14 @@ export function setupUtilities({$,notify,saveFile,collectBatch,fileName,zipFiles
         const video=await recordLoop(lastGradient,availableVideo,phase=>{if(ticket===serial)state(`Merekam video… ${Math.round(phase*100)}%`);});
         saveFile(name+(video.type.includes("mp4")?".mp4":".webm"),video);
         if(ticket===serial)state("Video loop 4 detik siap diunduh.");
+      }else if(kind==="gradient"){
+        recording=true;
+        setReady(ready);
+        const full=document.createElement("canvas");
+        try{
+          renderGradient(full,lastGradient,lastGradient.edge);
+          saveFile(name+"."+format.toLowerCase(),await rasterBlob(full,format));
+        }finally{full.width=full.height=0;}
       }else saveFile(name+"."+format.toLowerCase(),await encodeRaster(exportCanvas,format));
     }catch(error){notify(error.message);}
     finally{recording=false;setReady(ready);}

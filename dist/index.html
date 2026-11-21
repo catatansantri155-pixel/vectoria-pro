@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-title" content="Vektora">
 <script type="module" src="pwa.mjs?v=1"></script>
 <link rel="stylesheet" href="converter.css?v=23">
-<script type="module" src="converter.mjs?v=36"></script>
+<script type="module" src="converter.mjs?v=37"></script>
 </head>
 <body>
 <header class="header"><div class="header-inner">
@@ -187,11 +187,33 @@
         <p class="muted">Ukuran berlaku untuk sisi terpanjang, dengan batas 10 MP per ubin.</p>
       </div>
       <div id="gradientFields" hidden>
-        <label class="stack">Palet<select id="gradientPreset"><option value="dusk">Senja ungu</option><option value="sunrise">Fajar persik</option><option value="forest">Hutan berkabut</option><option value="ocean">Laut biru</option></select></label>
-        <div class="color-fields"><label class="stack">Warna 1<input id="gradientFirst" type="color"></label><label class="stack">Warna 2<input id="gradientSecond" type="color"></label></div>
-        <div class="control"><label for="grain">Tekstur</label><input id="grain" type="range" min="0" max="28" value="10"></div>
-        <label class="stack">Arah (derajat)<input id="angle" type="number" min="0" max="359" value="135"></label>
-        <label class="stack">Rasio<select id="gradientRatio"><option value="1">1:1 · Persegi</option><option value="0.5625">9:16 · Vertikal</option><option value="1.7777778">16:9 · Lanskap</option></select></label>
+        <label class="stack">Bentuk gradien
+          <select id="gradientType"><option value="linear">Linear</option><option value="radial">Radial</option><option value="conic">Melingkar</option></select>
+        </label>
+        <label class="stack">Palet
+          <select id="gradientPreset"><option value="dusk">Senja ungu</option><option value="sunrise">Fajar persik</option><option value="forest">Hutan berkabut</option><option value="ocean">Laut biru</option><option value="ember">Bara hangat</option><option value="mint">Mint sejuk</option><option value="custom" disabled>Warna kustom</option></select>
+        </label>
+        <div class="color-fields">
+          <label class="stack">Warna awal<input id="gradientFirst" type="color"></label>
+          <label class="stack">Warna akhir<input id="gradientSecond" type="color"></label>
+        </div>
+        <label class="check"><input id="gradientMiddleEnabled" type="checkbox"> Tambah warna tengah</label>
+        <div id="gradientMiddleFields" hidden>
+          <label class="stack">Warna tengah<input id="gradientMiddle" type="color"></label>
+          <div class="control"><label for="gradientStop">Posisi warna tengah</label><output id="gradientStopValue" for="gradientStop">50%</output><input id="gradientStop" type="range" min="1" max="99" value="50"></div>
+        </div>
+        <label class="stack" id="gradientAngleField">Sudut (derajat)<input id="angle" type="number" min="0" max="359" value="135"></label>
+        <div id="gradientCenter" class="color-fields" hidden>
+          <label class="stack">Pusat X (%)<input id="gradientX" type="number" min="0" max="100" value="50"></label>
+          <label class="stack">Pusat Y (%)<input id="gradientY" type="number" min="0" max="100" value="50"></label>
+        </div>
+        <div class="control"><label for="grain">Tekstur</label><output id="gradientGrainValue" for="grain">10</output><input id="grain" type="range" min="0" max="28" value="10"></div>
+        <label class="stack">Rasio
+          <select id="gradientRatio"><option value="1">1:1 · Persegi</option><option value="0.8">4:5 · Potret</option><option value="0.5625">9:16 · Vertikal</option><option value="1.3333333333">4:3 · Lanskap</option><option value="1.7777777778">16:9 · Lanskap</option></select>
+        </label>
+        <label class="stack">Ukuran PNG / JPG
+          <select id="gradientSize"><option value="1080">1.080 px</option><option value="1920" selected>1.920 px</option><option value="2560">2.560 px</option><option value="3840">3.840 px</option></select>
+        </label>
       </div>
 
     </section>
