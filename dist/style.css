@@ -62,3 +62,39 @@ body{background:radial-gradient(ellipse at 98% 0,#e1d9fb,transparent 60%),radial
   .topbar:has(#installApp:not([hidden])){grid-template-columns:auto minmax(0,1fr) auto}
   .top-actions:has(#installApp:not([hidden])){display:flex}
 }
+
+.editor-brand{display:flex;align-items:center;gap:7px}
+.editor-brand img{display:block;border-radius:8px;width:30px;height:30px}
+.back-link{display:inline-flex;align-items:center;gap:5px;width:max-content;min-height:44px;padding:0 10px;border-radius:10px;text-decoration:none;font-weight:600;color:var(--accent)}
+.back-link:hover{background:var(--light)}
+.back-arrow{display:flex;transform:rotate(180deg)}
+.back-arrow svg{width:17px;height:17px}
+.back-extra{margin-left:-2px}
+.project-label{color:var(--muted);font-size:11px}
+#projectName{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.selection-bar{display:flex;align-items:center;gap:6px;margin:8px 23px 0;min-width:0}
+#selectionName{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted);font-size:12px}
+.selection-bar .icon-btn{display:flex;justify-content:center;gap:5px;padding:0 9px;font-size:12px;font-weight:600}
+.selection-bar .icon-btn svg{width:16px;height:16px}
+.icon-btn.danger{color:#ad2442;border-color:#efd4da}
+.icon-btn.danger:not(:disabled):hover{color:#921530;background:#ffedf1}
+#style fieldset{min-width:0;border:0;padding:0;margin:0}
+#style fieldset:disabled{opacity:.65}
+.board-shell svg[data-tool=select] [data-locked]{cursor:default}
+.layer .icon-btn[aria-pressed=true]{background:#eee8ff;color:#5634c5}
+.dialog-back{margin-right:auto}
+
+@media(max-width:960px){
+  .selection-bar{margin-inline:13px}
+}
+
+@media(max-width:720px){
+  .back-extra,.project-label,#duplicateSelection span{display:none}
+  .editor-brand{gap:2px}
+  .editor-brand img{width:24px;height:24px}
+  .back-link{padding:0 5px;font-size:12px}
+  .selection-bar{margin:6px 8px 0;gap:4px}
+  .selection-bar .icon-btn{min-height:44px;min-width:44px;padding:0 6px;font-size:11px}
+  #selectionName{font-size:11px}
+  .layer .icon-btn{width:44px;min-width:44px;height:44px}
+}

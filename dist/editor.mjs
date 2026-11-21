@@ -41,7 +41,9 @@ function valid(doc) {
   return doc.items.every(item => item && typeof item.id==="string" && /^[\w-]{1,100}$/.test(item.id)
     && typeof item.name==="string" && item.name.length<=100 && ["pen","rect","ellipse"].includes(item.k)
     && validColor(item.fill) && validColor(item.stroke) && [item.dx,item.dy,item.sw].every(number) && item.sw>=0
-    && typeof item.hidden==="boolean" && (item.k==="pen"
+    && typeof item.hidden==="boolean"
+    && (item.opacity===undefined || (Number.isFinite(item.opacity) && item.opacity>=0 && item.opacity<=100))
+    && (item.locked===undefined || typeof item.locked==="boolean") && (item.k==="pen"
       ? typeof item.d==="string" && item.d.length<=90000 && /^\s*[Mm][\d\s.,+eEMmLlHhVvCcSsQqTtAaZz-]+$/.test(item.d)
       : [item.x,item.y,item.w,item.h,item.round].every(number) && item.w>0 && item.h>0 && item.round>=0));
 }
@@ -50,6 +52,7 @@ try { doc=JSON.parse(localStorage.getItem("vektora-v1")); } catch {}
 if (!valid(doc)) doc=sample();
 let active=null,tool="select",tab="layers",zoom=1,grid=false,gesture=null,past=[],future=[];
 const board=$("board"),stage=$("stage");
+let stockChecks;
 const copy = () => structuredClone(doc);
 const selected = () => doc.items.find(item=>item.id===active);
 const save = () => {
@@ -65,28 +68,32 @@ const save = () => {
   }
 };
 function record(before) {
+  stockChecks=undefined;
   past.push(before);
   if(past.length>50) past.shift();
   future=[];
   save();
 }
-function change(edit) {
+function change(edit, refreshProperties=true) {
+  if(gesture)return;
   const before=copy();
   edit();
   record(before);
-  render();
+  render(refreshProperties);
 }
 function navigateHistory(from,to) {
   if (!from.length || gesture) return;
   to.push(copy());
   doc=from.pop();
+  stockChecks=undefined;
   if(!selected()) active=null;
   save();
   render();
 }
-const tools=[["select","Pilih","Ketuk objek untuk memilih, lalu seret untuk memindahkannya."],["rect","Kotak","Seret di kanvas untuk membuat kotak."],["ellipse","Oval","Seret di kanvas untuk membuat oval."],["pen","Pena","Gambar garis bebas dengan menyeret jari di kanvas."]];
-$("toolList").innerHTML=tools.map(([id,label])=>`<button class="tool" data-tool="${id}" aria-label="${label}">${icon(id)}<span>${label}</span></button>`).join("");
+const tools=[["select","Pilih","Ketuk objek untuk memilih, lalu seret untuk memindahkannya."],["rect","Kotak","Seret di kanvas untuk membuat kotak."],["ellipse","Oval","Seret di kanvas untuk membuat oval."],["line","Garis","Seret untuk membuat garis lurus. Shift mengunci sudut 45°.","pencil"],["pen","Pena","Seret di kanvas untuk menggambar bebas."]];
+$("toolList").innerHTML=tools.map(([id,label,,glyph=id])=>`<button class="tool" data-tool="${id}" aria-label="${label}">${icon(glyph)}<span>${label}</span></button>`).join("");
 function selectTool(id) {
+  if(gesture)return;
   tool=id;
   for (const el of $("toolList").children) el.setAttribute("aria-pressed",el.dataset.tool===id);
   board.dataset.tool=id;
@@ -98,13 +105,14 @@ function node(item) {
   if (item.k==="pen") el=make("path",{d:item.d,"stroke-linecap":"round","stroke-linejoin":"round"});
   else if (item.k==="rect") el=make("rect",{x:item.x,y:item.y,width:item.w,height:item.h,rx:item.round});
   else el=make("ellipse",{cx:item.x+item.w/2,cy:item.y+item.h/2,rx:item.w/2,ry:item.h/2});
-  for (const [key,value] of Object.entries({fill:item.fill,stroke:item.stroke,"stroke-width":item.sw,transform:`translate(${item.dx} ${item.dy})`})) el.setAttribute(key,value);
+  for (const [key,value] of Object.entries({fill:item.fill,stroke:item.stroke,"stroke-width":item.sw,opacity:(item.opacity??100)/100,transform:`translate(${item.dx} ${item.dy})`})) el.setAttribute(key,value);
   return el;
 }
 function renderBoard() {
   board.setAttribute("viewBox",`0 0 ${doc.w} ${doc.h}`);
   const content=doc.items.filter(item=>!item.hidden).map(item=>{
     const group=make("g",{"data-shape":item.id});
+    if(item.locked)group.setAttribute("data-locked","");
     group.append(node(item));return group;
   });
   board.replaceChildren(...content);
@@ -142,12 +150,13 @@ board.addEventListener("pointerdown",event=>{
     active=target?.dataset.shape??null;
     if(!active){render();return;}
     const item=selected();
+    if(item.locked){render();return;}
     gesture={origin,before:copy(),dx:item.dx,dy:item.dy,mode:tool,id:event.pointerId};
   }else{
     if(doc.items.length>=500){toast("Batas proyek adalah 500 objek.");return;}
     const before=copy();
     const label=tools.find(entry=>entry[0]===tool)[1]+" "+(doc.items.length+1);
-    const item=tool==="pen" ? P(label,`M${origin.x} ${origin.y}`,"none","#6747db",Math.max(3,Math.round(Math.min(doc.w,doc.h)/180)))
+    const item=["pen","line"].includes(tool) ? P(label,`M${origin.x} ${origin.y}`,"none","#6747db",Math.max(3,Math.round(Math.min(doc.w,doc.h)/180)))
       : (tool==="rect"?R:E)(label,origin.x,origin.y,1,1,"#9a82eb");
     doc.items.push(item);active=item.id;
     gesture={origin,before,mode:tool,id:event.pointerId,last:origin};
@@ -160,7 +169,15 @@ board.addEventListener("pointermove",event=>{
   const current=point(event),{origin,mode}=gesture,item=selected();
   const dx=current.x-origin.x,dy=current.y-origin.y;
   if(mode==="select"){
-    item.dx=gesture.dx+dx;item.dy=gesture.dy+dy;
+    item.dx=Math.max(-1000000,Math.min(1000000,gesture.dx+dx));
+    item.dy=Math.max(-1000000,Math.min(1000000,gesture.dy+dy));
+  }else if(mode==="line"){
+    const distance=Math.hypot(dx,dy);
+    const angle=Math.round(Math.atan2(dy,dx)/(Math.PI/4))*(Math.PI/4);
+    const end=event.shiftKey
+      ? {x:Math.round(origin.x+Math.cos(angle)*distance),y:Math.round(origin.y+Math.sin(angle)*distance)}
+      : current;
+    item.d=`M${origin.x} ${origin.y} L${end.x} ${end.y}`;
   }else if(mode==="pen"){
     if(item.d.length<89950 && Math.hypot(current.x-gesture.last.x,current.y-gesture.last.y)>=Math.min(doc.w,doc.h)/700){
       item.d+=` L${current.x} ${current.y}`;gesture.last=current;gesture.moved=true;
@@ -184,61 +201,94 @@ board.addEventListener("pointerup",event=>endGesture(event,false));
 board.addEventListener("pointercancel",event=>endGesture(event,true));
 board.addEventListener("lostpointercapture",event=>endGesture(event,true));
 
-function action(id,glyph,label,disabled=false) {
-  return `<button class="icon-btn" data-action="${id}" aria-label="${label}" title="${label}" ${disabled?"disabled":""}>${icon(glyph)}</button>`;
+function action(id,glyph,label,disabled=false,pressed=null) {
+  return `<button class="icon-btn" data-action="${id}" aria-label="${label}" title="${label}" ${disabled?"disabled":""} ${pressed===null?"":`aria-pressed="${pressed}"`}>${icon(glyph)}</button>`;
 }
 function renderLayers(){
   const panel=$("layers");
-  const rows=[...doc.items].reverse().map(item=>`<div class="layer ${item.id===active?"active":""} ${item.hidden?"muted":""}" data-id="${item.id}"><button class="layer-name" data-action="select" aria-pressed="${item.id===active}"><span class="swatch" style="background:${item.fill==="none"?"#f8f5fc":item.fill};color:${item.fill==="none"&&item.stroke!=="none"?item.stroke:"#29203e"}">${icon(item.k)}</span><span>${html(item.name)}</span></button>${action("visibility",item.hidden?"eyeOff":"eye",item.hidden?"Tampilkan layer":"Sembunyikan layer")}</div>`).join("");
+  const rows=[...doc.items].reverse().map(item=>`<div class="layer ${item.id===active?"active":""} ${item.hidden?"muted":""}" data-id="${item.id}"><button class="layer-name" data-action="select" aria-pressed="${item.id===active}"><span class="swatch" style="background:${item.fill==="none"?"#f8f5fc":item.fill};color:${item.fill==="none"&&item.stroke!=="none"?item.stroke:"#29203e"}">${icon(item.k)}</span><span>${html(item.name)}</span></button>${action("lock","shield",item.locked?"Buka kunci layer":"Kunci layer",false,item.locked??false)}${action("visibility",item.hidden?"eyeOff":"eye",item.hidden?"Tampilkan layer":"Sembunyikan layer")}</div>`).join("");
   const index=doc.items.findIndex(item=>item.id===active);
+  const locked=selected()?.locked;
   const scroll=panel.scrollTop;
-  panel.innerHTML=`<div class="row-head"><h3>Layer kanvas</h3><span class="count">${doc.items.length} objek</span></div>${rows||'<p class="subtle">Kanvas kosong. Tambahkan objek dengan Kotak, Oval, atau Pena.</p>'}<div class="layer-actions">${action("up","up","Naikkan layer",index===-1||index===doc.items.length-1)}${action("down","down","Turunkan layer",index<=0)}${action("copy","copy","Duplikat layer",index===-1||doc.items.length>=500)}${action("trash","trash","Hapus layer",index===-1)}</div>`;
+  panel.innerHTML=`<div class="row-head"><h3>Layer kanvas</h3><span class="count">${doc.items.length} objek</span></div>${rows||'<p class="subtle">Kanvas kosong. Pilih alat gambar lalu seret di kanvas.</p>'}<div class="layer-actions">${action("up","up","Naikkan layer",locked||index===-1||index===doc.items.length-1)}${action("down","down","Turunkan layer",locked||index<=0)}${action("copy","copy","Duplikat layer",index===-1||doc.items.length>=500)}${action("trash","trash","Hapus layer",locked||index===-1)}</div>`;
   panel.scrollTop=scroll;
 }
 $("layers").addEventListener("click",event=>{
   const button=event.target.closest("[data-action]");
-  if(!button)return;
+  if(!button||gesture)return;
   const {action}=button.dataset;
   const item=doc.items.find(entry=>entry.id===button.closest("[data-id]")?.dataset.id);
   if(action==="select"){active=item.id;render();return;}
+  if(action==="lock"){change(()=>{item.locked=!item.locked;});return;}
   if(action==="visibility"){change(()=>{item.hidden=!item.hidden;});return;}
   const index=doc.items.findIndex(entry=>entry.id===active);
   if(index<0)return;
-  if(action==="copy"){change(()=>{const clone={...selected(),id:uid(),name:(selected().name+" salin").slice(0,100),dx:selected().dx+doc.w/40,dy:selected().dy+doc.h/40};doc.items.splice(index+1,0,clone);active=clone.id;});return;}
+  if(action==="copy"){duplicateSelected();return;}
+  if(selected().locked)return;
   if(action==="trash"){removeSelected();return;}
   const destination=index+(action==="up"?1:-1);
   if(destination>=0&&destination<doc.items.length) change(()=>{[doc.items[index],doc.items[destination]]=[doc.items[destination],doc.items[index]];});
 });
-function removeSelected(){
-  if(gesture||!selected())return;
-  change(()=>{doc.items=doc.items.filter(item=>item.id!==active);active=null;});
+function duplicateSelected(){
+  const item=selected();
+  if(gesture||!item||doc.items.length>=500)return;
+  change(()=>{
+    const clone={...item,id:uid(),name:(item.name.slice(0,94)+" salin"),locked:false,
+      dx:Math.min(1000000,item.dx+doc.w/40),dy:Math.min(1000000,item.dy+doc.h/40)};
+    doc.items.splice(doc.items.indexOf(item)+1,0,clone);
+    active=clone.id;
+  });
 }
+function removeSelected(){
+  const item=selected();
+  if(gesture||!item||item.locked)return;
+  change(()=>{doc.items.splice(doc.items.indexOf(item),1);active=null;});
+  toast("Objek dihapus. Pilih Urungkan untuk memulihkan.");
+}
+$("duplicateSelection").onclick=duplicateSelected;
+$("deleteSelection").onclick=removeSelected;
+$("editSelection").onclick=()=>openPanel("style");
 function field(name,label,value,props=""){
   return `<label class="field">${label}<input name="${name}" value="${html(value)}" ${props}></label>`;
 }
+const shapeNumber='type="number" min="1" max="1000000" step="any" required';
+const positionNumber='type="number" min="-1000000" max="1000000" step="any" required';
+const nonNegativeNumber='type="number" min="0" max="1000000" step="any" required';
+const defaultStroke=()=>Math.max(1,Math.round(Math.min(doc.w,doc.h)/200));
 function renderStyle(){
   const item=selected();
   $("style").innerHTML=item?`<div class="row-head"><h3>Properti objek</h3></div>
+    ${item.locked?'<p class="subtle">Buka kunci di tab Layer untuk mengedit objek ini.</p>':""}
+    <fieldset ${item.locked?"disabled":""}>
     ${field("name","Nama layer",item.name,'maxlength="100"')}
     <div class="fields">${field("fill","Warna isi",item.fill==="none"?"#9a82eb":item.fill,'type="color"')}${field("stroke","Warna garis",item.stroke==="none"?"#6747db":item.stroke,'type="color"')}</div>
     <label class="field inline"><input name="noFill" type="checkbox" ${item.fill==="none"?"checked":""}> Isi transparan</label>
-    ${field("sw","Tebal garis (px)",item.sw,'type="number" min="0" max="1000000" step="any"')}
-    <div class="fields">${field("dx","Geser X (px)",item.dx,'type="number" min="-1000000" max="1000000" step="any"')}${field("dy","Geser Y (px)",item.dy,'type="number" min="-1000000" max="1000000" step="any"')}</div>`
+    <label class="field inline"><input name="noStroke" type="checkbox" ${item.stroke==="none"?"checked":""}> Tanpa garis</label>
+    <div class="fields">${field("sw","Tebal garis (px)",item.sw,nonNegativeNumber)}${field("opacity","Opasitas (%)",item.opacity??100,'type="number" min="0" max="100" step="any" required')}</div>
+    <div class="fields">${field("dx",item.k==="pen"?"Geser X (px)":"Posisi X (px)",item.k==="pen"?item.dx:item.x+item.dx,positionNumber)}${field("dy",item.k==="pen"?"Geser Y (px)":"Posisi Y (px)",item.k==="pen"?item.dy:item.y+item.dy,positionNumber)}</div>
+    ${item.k==="pen"?"":`<div class="fields">${field("w","Lebar (px)",item.w,shapeNumber)}${field("h","Tinggi (px)",item.h,shapeNumber)}</div>`}
+    ${item.k==="rect"?field("round","Radius sudut (px)",item.round,nonNegativeNumber):""}</fieldset>`
     :'<div class="row-head"><h3>Properti objek</h3></div><p class="subtle">Pilih objek di kanvas atau dari tab Layer untuk mengatur tampilannya.</p>';
 }
 $("style").addEventListener("change",event=>{
-  const input=event.target,item=selected();
-  if(!item||!input.name||!input.checkValidity())return;
+  const input=event.target,item=selected(),name=input.name;
+  if(!item||item.locked||!name||gesture||!input.reportValidity())return;
+  const fields=$("style").querySelector("fieldset").elements;
+  const get=key=>fields.namedItem(key);
   change(()=>{
-    if(input.name==="noFill") {item.fill=input.checked?"none":$("style").querySelector('[name="fill"]').value;return;}
-    if(["dx","dy","sw"].includes(input.name)){
-      item[input.name]=Number(input.value);
-      if(input.name==="sw"&&item.sw>0&&item.stroke==="none") item.stroke="#6747db";
-    }else{
-      item[input.name]=input.value.trim()||"Objek";
-      if(input.name==="stroke"&&!item.sw)item.sw=Math.max(1,Math.round(Math.min(doc.w,doc.h)/200));
-    }
-  });
+    if(name==="noFill") item.fill=input.checked?"none":get("fill").value;
+    else if(name==="noStroke") item.stroke=input.checked?"none":get("stroke").value;
+    else if(input.type!=="number") item[name]=input.value.trim()||"Objek";
+    else if(item.k!=="pen"&&["dx","dy"].includes(name)){
+      item[name.slice(1)]=input.valueAsNumber;
+      item[name]=0;
+    }else item[name]=input.valueAsNumber;
+    if((name==="stroke"||name==="noStroke")&&item.stroke!=="none"&&!item.sw)item.sw=defaultStroke();
+  },false);
+  get("noFill").checked=item.fill==="none";
+  get("noStroke").checked=item.stroke==="none";
+  get("sw").value=item.sw;
+  if(name==="name") input.value=item.name;
 });
 const adobe="https://helpx.adobe.com/stock/contributor/submit-your-content/submit-vectors/technical-requirements-for-vector-submissions.html";
 function exportSvg(){
@@ -252,10 +302,11 @@ function exportSvg(){
   return '<?xml version="1.0" encoding="UTF-8"?>\n'+new XMLSerializer().serializeToString(svg);
 }
 function technical(){
+  if(stockChecks)return stockChecks;
   const area=doc.w*doc.h/1e6;
   const mb=new Blob([exportSvg()]).size/1e6;
-  const visible=doc.items.some(item=>!item.hidden&&(item.fill!=="none"||(item.sw>0&&item.stroke!=="none")));
-  return [
+  const visible=doc.items.some(item=>!item.hidden&&item.opacity!==0&&(item.fill!=="none"||(item.sw>0&&item.stroke!=="none")));
+  return stockChecks=[
     [visible,"Ada objek dengan isi atau garis aktif"],
     [area>=15&&area<=65,`Artboard ${area.toLocaleString("id",{maximumFractionDigits:3})} MP · syarat 15–65 MP`],
     [mb<=45,`SVG ${Math.max(1,Math.round(mb*1000))} KB · batas 45 MB`],
@@ -298,13 +349,20 @@ function updateHistory() {
   $("undo").disabled=!past.length;
   $("redo").disabled=!future.length;
 }
-function render() {
+function render(refreshProperties=true) {
   $("projectName").textContent=doc.name;
   $("sizeText").textContent=`${doc.w} × ${doc.h} px`;
   updateHistory();
+  const item=selected();
+  $("selectionName").textContent=item
+    ? item.name+(item.locked?" · Terkunci":item.hidden?" · Tersembunyi":"")
+    : "Belum ada objek dipilih";
+  $("editSelection").disabled=!item;
+  $("duplicateSelection").disabled=!item||doc.items.length>=500;
+  $("deleteSelection").disabled=!item||item.locked;
   renderBoard();
   renderLayers();
-  renderStyle();
+  if(refreshProperties)renderStyle();
   const checks=technical();
   renderStock(checks);
   $("stockSummary").textContent=checks.every(([ok])=>ok)?"Pemeriksaan dasar lulus":"Ada syarat yang perlu diperiksa";
@@ -358,7 +416,7 @@ function toast(message){
   toastTimer=setTimeout(()=>$("toast").hidden=true,2900);
 }
 function download(name,data,type){
-  const url=URL.createObjectURL(new Blob([data],{type}));
+  const url=URL.createObjectURL(data instanceof Blob?data:new Blob([data],{type}));
   const anchor=document.createElement("a");
   anchor.href=url;anchor.download=name;
   document.body.append(anchor);anchor.click();anchor.remove();
@@ -378,11 +436,13 @@ function backup(){
 function replaceProject(next){
   change(()=>{doc=next;active=null;});
   setZoom(1);
-  selectTool("select");
+  selectTool(doc.items.length?"select":"rect");
+  setTab("layers");
   $("modal").close();
 }
 function confirmBlank(){
-  showModal("Buat proyek baru",'<p class="subtle">Kanvas baru akan menjadi proyek aktif. Unduh cadangan jika ingin membuka kembali proyek ini nanti.</p><div class="modal-actions"><button id="blankBackup" class="secondary">Unduh cadangan</button><button id="newConfirm" class="primary">Buat kanvas kosong</button></div>');
+  showModal("Buat proyek baru",'<p class="subtle">Kanvas baru akan menjadi proyek aktif. Unduh cadangan jika ingin membuka kembali proyek ini nanti.</p><div class="modal-actions"><button id="blankBack" class="secondary dialog-back">Kembali</button><button id="blankBackup" class="secondary">Unduh cadangan</button><button id="newConfirm" class="primary">Buat kanvas kosong</button></div>');
+  $("blankBack").onclick=()=> $("project").click();
   $("blankBackup").onclick=backup;
   $("newConfirm").onclick=()=>replaceProject(blank());
 }
@@ -412,24 +472,69 @@ $("importProject").onchange=async event=>{
     if(file.size>12e6)throw Error();
     const incoming=JSON.parse(await file.text());
     if(!valid(incoming))throw Error();
-    showModal("Buka cadangan",`<p class="subtle">Jadikan <strong>${html(incoming.name)}</strong> proyek aktif?</p><div class="modal-actions"><button id="importBackup" class="secondary">Cadangkan proyek aktif</button><button id="importConfirm" class="primary">Buka proyek</button></div>`);
+    showModal("Buka cadangan",`<p class="subtle">Jadikan <strong>${html(incoming.name)}</strong> proyek aktif?</p><div class="modal-actions"><button id="importBack" class="secondary dialog-back">Kembali</button><button id="importBackup" class="secondary">Cadangkan proyek aktif</button><button id="importConfirm" class="primary">Buka proyek</button></div>`);
+    $("importBack").onclick=()=> $("project").click();
     $("importBackup").onclick=backup;
     $("importConfirm").onclick=()=>{replaceProject(incoming);toast("Proyek berhasil dibuka.");};
   } catch {toast("File tidak cocok. Pilih cadangan JSON dari Vektora.");}
 };
+function pngSize(w,h){
+  const scale=Math.min(1,4096/Math.max(w,h),Math.sqrt(8000000/(w*h)));
+  return [Math.max(1,Math.floor(w*scale)),Math.max(1,Math.floor(h*scale))];
+}
+async function downloadPng(button,width,height){
+  const filename=fileBase()+".png";
+  const url=URL.createObjectURL(new Blob([exportSvg()],{type:"image/svg+xml"}));
+  button.disabled=true;
+  let canvas;
+  try {
+    const image=new Image();
+    image.src=url;
+    await image.decode();
+    canvas=document.createElement("canvas");
+    canvas.width=width;
+    canvas.height=height;
+    const context=canvas.getContext("2d");
+    context.drawImage(image,0,0,width,height);
+    const blob=await new Promise(resolve=>canvas.toBlob(resolve,"image/png"));
+    if(!blob)throw Error("Gagal membuat PNG.");
+    download(filename,blob);
+    const status=$("exportStatus");
+    if(status)status.textContent="PNG diunduh.";
+    else toast("PNG diunduh.");
+  } catch {
+    const status=$("exportStatus");
+    if(status)status.textContent="PNG gagal dibuat di browser ini.";
+    else toast("PNG gagal dibuat di browser ini.");
+  } finally {
+    URL.revokeObjectURL(url);
+    if(canvas)canvas.width=canvas.height=1;
+    button.disabled=false;
+  }
+}
 $("export").onclick=()=>{
   const checks=technical();
-  showModal("Ekspor aset SVG",`${checklist(checks)}<p class="subtle">${checks.every(([ok])=>ok)?"SVG siap diperiksa dan diunggah secara manual melalui Adobe Stock Contributor.":"Perbaiki poin teknis sebelum mengunggah ke Adobe Stock. Kamu tetap bisa mengunduh SVG untuk ditinjau."}</p><div class="modal-actions"><button id="downloadSvg" class="primary">${icon("download")} Unduh SVG</button><button id="openStock" class="secondary">Buka panel Stock</button></div>`);
+  const [width,height]=pngSize(doc.w,doc.h);
+  showModal("Ekspor aset",`<div class="modal-actions"><button id="downloadSvg" class="primary">${icon("download")} Unduh SVG</button><button id="downloadPng" class="secondary">Unduh PNG</button></div>
+    <p class="subtle" id="pngSize">PNG ${width} × ${height} px, dengan transparansi kanvas.</p><p class="subtle" id="exportStatus" role="status"></p>
+    <div class="row-head"><h3>Pemeriksaan SVG untuk Adobe Stock</h3></div>${checklist(checks)}
+    <button id="openStock" class="secondary">Buka panel Stock</button>`);
   $("downloadSvg").onclick=()=>{download(fileBase()+".svg",exportSvg(),"image/svg+xml");$("modal").close();toast("SVG diunduh.");};
+  const pngButton=$("downloadPng");
+  pngButton.onclick=()=>downloadPng(pngButton,width,height);
   $("openStock").onclick=()=>{$("modal").close();openPanel("stock");};
 };
 function showHelp(){
-  showModal("Panduan Vektora",'<ol class="subtle"><li>Ketuk nama proyek untuk membuat kanvas kosong atau mengatur ukurannya.</li><li>Pilih Kotak, Oval, atau Pena, kemudian seret jari pada kanvas.</li><li>Gunakan Pilih untuk memindahkan objek. Buka Panel untuk menata Layer dan Gaya.</li><li>Isi metadata di tab Stock, periksa SVG, lalu unggah melalui portal Contributor.</li></ol><p class="subtle">Satu proyek aktif disimpan otomatis di browser ini. Unduh cadangan JSON sebelum pindah perangkat atau membersihkan data browser.</p>');
+  showModal("Panduan Vektora",'<ol class="subtle"><li>Ketuk nama proyek untuk membuat kanvas kosong atau mengatur ukurannya.</li><li>Pilih Kotak, Oval, Garis, atau Pena, lalu seret di kanvas.</li><li>Gunakan Pilih untuk menggeser objek. Tombol di bawah kanvas membuka Properti, menggandakan, atau menghapus pilihan. Kunci layer di Panel agar aman dari perubahan.</li><li>Isi metadata di tab Stock, periksa SVG, lalu unggah melalui portal Contributor.</li></ol><p class="subtle">Satu proyek aktif disimpan otomatis di browser ini. Unduh cadangan JSON sebelum pindah perangkat atau membersihkan data browser.</p>');
 }
 $("help").onclick=showHelp;
 document.addEventListener("keydown",event=>{
-  if($("modal").open||event.target.matches("input,textarea,select"))return;
-  if(event.key==="Escape"){closePanel();return;}
+  if($("modal").open||event.target.closest("input,textarea,select,[contenteditable]"))return;
+  if(event.key==="Escape"){
+    if($("panel").classList.contains("open"))closePanel();
+    else if(!gesture){active=null;selectTool("select");render();}
+    return;
+  }
   if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==="z"){event.preventDefault();event.shiftKey?$("redo").click():$("undo").click();}
   if(event.key==="Delete"||event.key==="Backspace"){event.preventDefault();removeSelected();}
 });

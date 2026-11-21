@@ -9,7 +9,7 @@ Konverter JPG, PNG, WebP, BMP, GIF, dan AVIF dengan pemrosesan lokal. GIF dipros
 - **Perbesar** memakai interpolasi dan pemulihan tepi opsional. Resolusi keluaran dibatasi 16 MP untuk mengendalikan memori.
 - **Pola** membuat ubin dengan kisi lurus, cermin empat arah, atau susun bata. Atur jumlah motif, rotasi, dan ukuran ekspor, lalu periksa sambungan pada pratinjau 3 × 3. PNG mempertahankan transparansi sumber.
 - **Gradien** membuat gradien linear, radial, atau melingkar dengan enam palet, dua atau tiga warna, serta tekstur opsional. Pilih rasio dan panjang sisi hingga 3.840 px untuk PNG/JPG. Ekspor loop empat detik tersedia jika browser mendukung MediaRecorder dan Canvas CaptureStream.
-- **Editor gambar** di `editor.html` tetap menggunakan penyimpanan proyek browser dari versi sebelumnya.
+- **Editor vektor** di `editor.html` memiliki alat kotak, oval, garis lurus, dan pena, aksi objek di bawah kanvas, kunci layer, serta properti warna, ukuran, dan opasitas. Proyek tersimpan di browser dan bisa dicadangkan sebagai JSON. Ekspor mendukung SVG dan PNG transparan hingga 8 MP dengan sisi maksimum 4.096 px.
 
 ## Hasil HD
 

@@ -11,14 +11,14 @@
 <link rel="manifest" href="app.webmanifest?v=6">
 <meta name="apple-mobile-web-app-title" content="Vektora">
 <script type="module" src="pwa.mjs?v=1"></script>
-<link rel="stylesheet" href="style.css?v=8">
-<script type="module" src="editor.mjs?v=8"></script>
+<link rel="stylesheet" href="style.css?v=9">
+<script type="module" src="editor.mjs?v=9"></script>
 </head>
 <body>
 <header class="topbar">
-  <a class="brand" href="./" aria-label="Vektora Studio"><img class="logo" src="assets/vektora-192.png" width="37" height="37" alt=""><span>Vektora<span class="brand-sub"> STUDIO</span></span></a>
+  <div class="editor-brand"><img src="assets/vektora-192.png" width="30" height="30" alt=""><a class="back-link" href="./" aria-label="Kembali ke Vektora Studio"><span class="back-arrow" data-icon="right"></span>Kembali<span class="back-extra"> ke Studio</span></a></div>
   <div class="project-head">
-    <button id="project" class="project" data-icon="folder"><span id="projectName">Botanical Study</span><span data-icon="chevron"></span></button>
+    <button id="project" class="project" data-icon="folder" aria-haspopup="dialog"><span class="project-label">Proyek</span><span id="projectName">Botanical Study</span><span data-icon="chevron"></span></button>
     <span id="saveState" class="saved" role="status"><i></i><span>Tersimpan di perangkat</span></span>
   </div>
   <div class="top-actions">
@@ -39,15 +39,21 @@
   </nav>
   <section class="workspace" aria-label="Area gambar">
     <div class="workspace-top">
-      <div class="section-title"><span class="square-icon" data-icon="artboard"></span><div><h1>Kanvas</h1><p id="sizeText">4000 × 4000 px</p></div></div>
+      <div class="section-title"><span class="square-icon" data-icon="artboard"></span><div><h1>Editor vektor</h1><p id="sizeText">4000 × 4000 px</p></div></div>
       <div class="canvas-actions"><button id="gridToggle" class="icon-btn" aria-label="Tampilkan kisi" aria-pressed="false" data-icon="grid"></button><button id="fit" class="icon-btn" aria-label="Paskan kanvas" data-icon="fit"></button></div>
     </div>
     <div id="stage" class="stage">
       <div class="board-holder"><div class="board-shell"><svg id="board" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Kanvas vektor interaktif"></svg></div></div>
     </div>
+    <div class="selection-bar" aria-label="Tindakan objek">
+      <span id="selectionName" aria-live="polite">Belum ada objek dipilih</span>
+      <button id="editSelection" class="icon-btn" data-icon="sliders" disabled>Properti</button>
+      <button id="duplicateSelection" class="icon-btn" data-icon="copy" aria-label="Duplikat objek" title="Duplikat objek" disabled><span>Duplikat</span></button>
+      <button id="deleteSelection" class="icon-btn danger" data-icon="trash" disabled>Hapus</button>
+    </div>
     <div class="workspace-foot">
       <span id="hint" class="hint"></span>
-    <button id="export" class="primary" data-icon="download">Ekspor <span>SVG</span></button>
+    <button id="export" class="primary" data-icon="download">Ekspor <span>aset</span></button>
       <div class="zoom" aria-label="Pembesaran"><button id="minus" class="icon-btn" data-icon="zoomOut" aria-label="Perkecil"></button><span id="zoomLabel">100%</span><button id="plus" class="icon-btn" data-icon="zoomIn" aria-label="Perbesar"></button></div>
     </div>
   </section>
@@ -56,7 +62,7 @@
     <div class="panel-top"><div class="section-title"><span class="square-icon" data-icon="layers"></span><div><h2>Panel proyek</h2><p>Atur dan periksa asetmu</p></div></div><button id="closePanel" class="icon-btn mobile-only" data-icon="close" aria-label="Tutup panel"></button></div>
     <div class="tabs" role="tablist" aria-label="Panel proyek">
       <button id="layerTab" data-tab="layers" role="tab" aria-controls="layers" data-icon="layers">Layer</button>
-      <button id="styleTab" data-tab="style" role="tab" aria-controls="style" data-icon="palette">Gaya</button>
+      <button id="styleTab" data-tab="style" role="tab" aria-controls="style" data-icon="palette">Properti</button>
       <button id="stockTab" data-tab="stock" role="tab" aria-controls="stock" data-icon="shield">Stock</button>
     </div>
     <section id="layers" class="tab-body" role="tabpanel" aria-labelledby="layerTab"></section>
@@ -65,7 +71,7 @@
     <div class="panel-bottom"><button id="stockShortcut" class="stock-card" data-icon="shield"><span><strong>Cek Adobe Stock</strong><small id="stockSummary">Periksa syarat teknis SVG</small></span><span data-icon="right"></span></button></div>
   </aside>
 </main>
-<dialog id="modal"><div class="modal-head"><h2 id="modalTitle"></h2><button id="modalClose" class="icon-btn" data-icon="close" aria-label="Tutup"></button></div><div id="modalBody"></div></dialog>
+<dialog id="modal" aria-labelledby="modalTitle"><div class="modal-head"><h2 id="modalTitle"></h2><button id="modalClose" class="icon-btn" data-icon="close" aria-label="Tutup"></button></div><div id="modalBody"></div></dialog>
 <div id="toast" class="toast" role="status" hidden></div>
 <input type="file" id="importProject" accept=".json,application/json" hidden>
 <dialog id="installHelp" aria-labelledby="installTitle">
